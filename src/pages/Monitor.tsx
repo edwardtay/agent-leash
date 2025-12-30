@@ -409,35 +409,35 @@ export function Monitor() {
             );
           })}
         </div>
+          </div>
 
-        {/* Active Permissions */}
-        {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length > 0 && (
-          <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-            <div className="p-4 border-b border-[var(--border)]">
-              <h3 className="font-medium">Active Permissions ({permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length})</h3>
-            </div>
-            {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).map((p) => {
-              // Find original index for revoke
-              const originalIndex = permissions.findIndex(perm => perm.id === p.id);
-              return (
-                <div key={p.id} className="p-3 border-b border-[var(--border)] last:border-0 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</p>
-                    <p className="text-xs text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</p>
-                  </div>
-                  <button onClick={() => { revokePermission(originalIndex); setPermissions(getPermissionsWithHealth()); }} className="px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded">
-                    Revoke
-                  </button>
+          {/* Right Column - Permissions & Live Activity */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Active Permissions */}
+            {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length > 0 && (
+              <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+                <div className="p-3 border-b border-[var(--border)]">
+                  <h3 className="font-medium text-sm">Active Permissions ({permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length})</h3>
                 </div>
-              );
-            })}
-          </div>
-        )}
-          </div>
+                {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).map((p) => {
+                  const originalIndex = permissions.findIndex(perm => perm.id === p.id);
+                  return (
+                    <div key={p.id} className="p-2 border-b border-[var(--border)] last:border-0 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</p>
+                        <p className="text-[10px] text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</p>
+                      </div>
+                      <button onClick={() => { revokePermission(originalIndex); setPermissions(getPermissionsWithHealth()); }} className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded">
+                        Revoke
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-          {/* Right Column - Live Activity Feed */}
-          {envioStatus === "online" && (
-            <div className="lg:col-span-1">
+            {/* Live Activity Feed */}
+            {envioStatus === "online" && (
               <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] lg:sticky lg:top-6">
                 <div className="p-4 border-b border-[var(--border)]">
                   <div className="flex items-center gap-2 mb-2">
@@ -491,8 +491,8 @@ export function Monitor() {
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
