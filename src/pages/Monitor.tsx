@@ -13,6 +13,8 @@ import {
   formatTimeRemaining,
   type PermissionWithHealth,
 } from "../lib/permissions";
+import { executeAgentTransaction, getAgentBalance } from "../lib/agent";
+import { checkEnvioHealth } from "../lib/envio";
 
 const COLORS = { primary: "#22c55e", warning: "#eab308", danger: "#ef4444" };
 
@@ -23,10 +25,21 @@ export function Monitor() {
   const [setup, setSetup] = useState<any>(null);
   const [permissions, setPermissions] = useState<PermissionWithHealth[]>([]);
   const [stats, setStats] = useState(getDashboardStats());
+  const [agentBalance, setAgentBalance] = useState({ eth: "0", usdc: "0" });
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [lastExecution, setLastExecution] = useState<any>(null);
+  const [envioStatus, setEnvioStatus] = useState<"checking" | "online" | "offline">("checking");
 
   useEffect(() => {
     const stored = localStorage.getItem("leash_agent_setup");
-    if (stored) setSetup(JSON.parse(stored));
+    if (stored) {
+      const s = JSON.parse(stored);
+      setSetup(s);
+      // Fetch agent balance
+      if (s.agentWallet) {
+        getAgentBalance(s.agentWallet as `0x${string}`).then(setAgentBalance);
+      }
+    }
 
     const load = () => {
       setPermissions(getPermissionsWithHealth());
@@ -34,6 +47,10 @@ export function Monitor() {
     };
     load();
     const i = setInterval(load, 5000);
+
+    // Check Envio status
+    checkEnvioHealth().then(ok => setEnvioStatus(ok ? "online" : "offline"));
+
     return () => clearInterval(i);
   }, []);
 
@@ -42,6 +59,43 @@ export function Monitor() {
       revokePermission(index);
       setPermissions(getPermissionsWithHealth());
       setStats(getDashboardStats());
+    }
+  };
+
+  // Execute a real transaction using the agent
+  const handleExecute = async () => {
+    if (!setup) return;
+    
+    const privateKey = localStorage.getItem("session_private_key") as `0x${string}`;
+    if (!privateKey) {
+      alert("Agent wallet not found");
+      return;
+    }
+
+    setIsExecuting(true);
+    try {
+      // For demo: send a small amount to a test address
+      const testRecipient = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
+      const amount = "0.0001"; // Very small amount for demo
+      
+      const result = await executeAgentTransaction(
+        privateKey,
+        testRecipient,
+        amount,
+        setup.token === "ETH" || setup.token === "WETH" ? "ETH" : "USDC"
+      );
+
+      setLastExecution(result);
+      
+      if (result.success) {
+        // Refresh balance
+        getAgentBalance(setup.agentWallet as `0x${string}`).then(setAgentBalance);
+        setStats(getDashboardStats());
+      }
+    } catch (error) {
+      console.error("Execution error:", error);
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -79,11 +133,24 @@ export function Monitor() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-semibold">Agent Dashboard</h1>
-            <p className="text-[var(--text-muted)] text-sm">Real-time monitoring</p>
+            <p className="text-[var(--text-muted)] text-sm">Real-time monitoring & execution</p>
           </div>
-          <button onClick={() => navigate("/setup")} className="px-4 py-2 bg-[var(--bg-card)] rounded-lg border border-[var(--border)] text-sm hover:border-[var(--primary)]">
-            + New Agent
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Envio Status */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs ${
+              envioStatus === "online" ? "bg-green-500/20 text-green-400" :
+              envioStatus === "offline" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                envioStatus === "online" ? "bg-green-400" :
+                envioStatus === "offline" ? "bg-red-400" : "bg-yellow-400"
+              }`}></span>
+              Envio {envioStatus}
+            </div>
+            <button onClick={() => navigate("/setup")} className="px-4 py-2 bg-[var(--bg-card)] rounded-lg border border-[var(--border)] text-sm hover:border-[var(--primary)]">
+              + New Agent
+            </button>
+          </div>
         </div>
 
         {/* Stats Row */}
@@ -120,46 +187,87 @@ export function Monitor() {
           {/* Health Pie */}
           <div className="p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
             <h3 className="font-medium mb-4">Permission Health</h3>
-            <div className="h-48 flex items-center justify-center">
+            <div className="h-36 flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={healthData} cx="50%" cy="50%" innerRadius={40} outerRadius={65} dataKey="v" paddingAngle={3}>
+                  <Pie data={healthData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="v" paddingAngle={3}>
                     {healthData.map((e, i) => <Cell key={i} fill={e.c} />)}
                   </Pie>
                   <Tooltip contentStyle={{ background: '#111', border: '1px solid #333', fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex justify-center gap-4 text-xs">
+            <div className="flex justify-center gap-3 text-xs mt-2">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Healthy</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Warning</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Critical</span>
             </div>
           </div>
         </div>
 
-        {/* Agent Card */}
+        {/* Agent Card with Execute Button */}
         {setup && (
           <div className="p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] mb-6">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-4">
               <span className="text-4xl">🤖</span>
               <div className="flex-1">
-                <h3 className="font-semibold text-lg">{setup.agentName}</h3>
-                <p className="text-sm text-[var(--text-muted)]">
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="font-semibold text-lg">{setup.agentName}</h3>
+                  <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">● Active</span>
+                </div>
+                <p className="text-sm text-[var(--text-muted)] mb-3">
                   {setup.spendLimit} {setup.token || "ETH"} / {setup.permissionType === "stream" ? "sec" : setup.frequency}
+                  {setup.permType && <span className="ml-2 font-mono text-[10px] opacity-60">({setup.permType})</span>}
+                </p>
+                
+                {/* Agent Wallet & Balance */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
+                    <p className="text-[10px] text-[var(--text-muted)]">Agent Wallet</p>
+                    <p className="font-mono text-xs truncate">{setup.agentWallet}</p>
+                  </div>
+                  <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
+                    <p className="text-[10px] text-[var(--text-muted)]">Agent Balance</p>
+                    <p className="text-sm font-medium">{agentBalance.eth} ETH • {agentBalance.usdc} USDC</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Execute Button */}
+              <div className="text-right">
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting || parseFloat(agentBalance.eth) < 0.0001}
+                  className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                  {isExecuting ? "Executing..." : "⚡ Test Execute"}
+                </button>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                  Sends 0.0001 ETH to test
                 </p>
               </div>
-              <div className="text-right">
-                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">● Active</span>
-                {setup.permType && (
-                  <p className="text-[10px] font-mono text-[var(--text-muted)] mt-1">{setup.permType}</p>
+            </div>
+
+            {/* Last Execution Result */}
+            {lastExecution && (
+              <div className={`mt-4 p-3 rounded-lg ${lastExecution.success ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+                <p className={`text-sm ${lastExecution.success ? "text-green-400" : "text-red-400"}`}>
+                  {lastExecution.success ? "✅ Transaction successful!" : "❌ Transaction failed"}
+                </p>
+                {lastExecution.txHash && (
+                  <a 
+                    href={`https://sepolia.etherscan.io/tx/${lastExecution.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[var(--primary)] hover:underline"
+                  >
+                    View on Etherscan →
+                  </a>
+                )}
+                {lastExecution.error && (
+                  <p className="text-xs text-red-400 mt-1">{lastExecution.error}</p>
                 )}
               </div>
-            </div>
-            <div className="mt-4 p-3 bg-[var(--bg-dark)] rounded-lg">
-              <p className="text-xs text-[var(--text-muted)]">Agent Wallet</p>
-              <p className="font-mono text-sm">{setup.agentWallet}</p>
-            </div>
+            )}
           </div>
         )}
 
@@ -231,12 +339,20 @@ function PermRow({ p, i, onRevoke }: { p: PermissionWithHealth; i: number; onRev
   );
 }
 
-function genSpendData(perms: PermissionWithHealth[]) {
+function genSpendData(_perms: PermissionWithHealth[]) {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // Use real execution data from localStorage
+  const executions = JSON.parse(localStorage.getItem("leash_executions") || "[]");
+  
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(Date.now() - (6 - i) * 86400000);
-    let v = 0;
-    perms.forEach(p => { if (p.status === "healthy") v += Math.random() * parseFloat(p.config.amountPerPeriod) * 0.3; });
+    const dayStart = new Date(d.setHours(0, 0, 0, 0)).getTime();
+    const dayEnd = dayStart + 86400000;
+    
+    // Sum executions for this day
+    const dayExecs = executions.filter((e: any) => e.timestamp >= dayStart && e.timestamp < dayEnd);
+    const v = dayExecs.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+    
     return { d: days[d.getDay()], v: parseFloat(v.toFixed(4)) };
   });
 }
