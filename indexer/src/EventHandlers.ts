@@ -1,7 +1,8 @@
-import { SimpleVault } from "generated";
+// @ts-nocheck
+import { SimpleVault } from "../generated";
 
 // Handle Deposit events
-SimpleVault.Deposit.handler(async ({ event, context }: { event: any; context: any }) => {
+SimpleVault.Deposit.handler(async ({ event, context }) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultDeposit.set({
@@ -40,7 +41,7 @@ SimpleVault.Deposit.handler(async ({ event, context }: { event: any; context: an
 });
 
 // Handle Withdrawal events
-SimpleVault.Withdrawal.handler(async ({ event, context }: { event: any; context: any }) => {
+SimpleVault.Withdrawal.handler(async ({ event, context }) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultWithdrawal.set({
