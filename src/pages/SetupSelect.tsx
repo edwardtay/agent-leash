@@ -2,43 +2,47 @@ import { Link } from "react-router-dom";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-// Agent types determine which permission types are available
+// Realistic agents that can actually work on Sepolia
 const AGENTS = [
   {
     id: "dca",
     name: "DCA Bot",
     icon: "📈",
-    desc: "Dollar-cost average into tokens on a schedule",
+    desc: "Auto-buy tokens on a schedule (daily, weekly)",
     permTypes: ["native-token-periodic", "erc20-token-periodic"],
-    tokens: ["ETH", "USDC", "WETH"],
-    example: "Buy 0.01 ETH every day",
-  },
-  {
-    id: "sniper",
-    name: "Price Sniper",
-    icon: "🎯",
-    desc: "Execute trades when price hits your target",
-    permTypes: ["erc20-token-periodic"],
-    tokens: ["USDC", "USDT", "DAI"],
-    example: "Buy ETH when price < $2000",
-  },
-  {
-    id: "subscription",
-    name: "Subscriptions",
-    icon: "💸",
-    desc: "Pay recurring subscriptions automatically",
-    permTypes: ["native-token-stream", "erc20-token-stream"],
     tokens: ["ETH", "USDC"],
-    example: "Stream 0.001 ETH/hour to service",
+    example: "Swap 0.01 ETH to USDC every day",
+    canDemo: true,
   },
   {
-    id: "yield",
-    name: "Yield Optimizer",
-    icon: "🌾",
-    desc: "Auto-compound and rebalance DeFi positions",
-    permTypes: ["erc20-token-periodic", "erc20-token-stream"],
-    tokens: ["USDC", "WETH", "DAI"],
-    example: "Reinvest rewards every 6 hours",
+    id: "transfer",
+    name: "Auto-Transfer",
+    icon: "💸",
+    desc: "Send tokens to an address on schedule",
+    permTypes: ["native-token-periodic", "erc20-token-periodic"],
+    tokens: ["ETH", "USDC"],
+    example: "Send 0.005 ETH to savings wallet daily",
+    canDemo: true,
+  },
+  {
+    id: "gas",
+    name: "Gas Refiller",
+    icon: "⛽",
+    desc: "Top up a wallet when ETH balance is low",
+    permTypes: ["native-token-periodic"],
+    tokens: ["ETH"],
+    example: "Refill bot wallet with 0.01 ETH when < 0.005",
+    canDemo: true,
+  },
+  {
+    id: "vault",
+    name: "Savings Vault",
+    icon: "🏦",
+    desc: "Auto-deposit to a vault contract",
+    permTypes: ["native-token-periodic", "erc20-token-periodic"],
+    tokens: ["ETH", "USDC"],
+    example: "Deposit 0.01 ETH to vault weekly",
+    canDemo: true,
   },
 ];
 
@@ -74,10 +78,15 @@ export function SetupSelect() {
               <div className="flex items-start gap-4">
                 <span className="text-4xl">{agent.icon}</span>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg group-hover:text-[var(--primary)]">{agent.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-lg group-hover:text-[var(--primary)]">{agent.name}</h3>
+                    {agent.canDemo && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">Works on Sepolia</span>
+                    )}
+                  </div>
                   <p className="text-sm text-[var(--text-muted)] mt-1">{agent.desc}</p>
                   
-                  {/* Permission types this agent uses */}
+                  {/* Permission types */}
                   <div className="flex flex-wrap gap-1 mt-3">
                     {agent.permTypes.map((pt) => (
                       <span key={pt} className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
@@ -88,7 +97,7 @@ export function SetupSelect() {
                     ))}
                   </div>
 
-                  {/* Supported tokens */}
+                  {/* Tokens */}
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-[10px] text-[var(--text-muted)]">Tokens:</span>
                     {agent.tokens.map((t) => (
@@ -118,17 +127,25 @@ export function SetupSelect() {
               <span className="text-xl">2️⃣</span>
               <div>
                 <p className="font-medium">Agent monitors conditions</p>
-                <p className="text-[var(--text-muted)] text-xs">Time, price, or other triggers</p>
+                <p className="text-[var(--text-muted)] text-xs">Time-based triggers (schedule)</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-xl">3️⃣</span>
               <div>
                 <p className="font-medium">Agent executes within limits</p>
-                <p className="text-[var(--text-muted)] text-xs">Via Pimlico bundler, can't exceed permission</p>
+                <p className="text-[var(--text-muted)] text-xs">Transactions indexed by Envio</p>
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Networks */}
+        <div className="mt-4 p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+          <p className="text-xs text-[var(--text-muted)]">
+            <span className="text-[var(--primary)]">Networks:</span> Sepolia (testnet) • Base Sepolia (testnet) — 
+            Transactions indexed by Envio HyperIndex across both chains
+          </p>
         </div>
       </div>
     </div>

@@ -1,12 +1,23 @@
 /**
  * Agent Execution Service
- * Executes transactions using granted ERC-7715 permissions via Pimlico bundler
+ * Executes transactions for different agent types on Sepolia
  */
 
 import { createPublicClient, http, parseEther, encodeFunctionData } from "viem";
 import { sepolia } from "viem/chains";
 
-// Simple ERC20 transfer ABI
+// Simple vault ABI for deposits
+const VAULT_ABI = [
+  {
+    name: "deposit",
+    type: "function",
+    inputs: [],
+    outputs: [],
+    stateMutability: "payable",
+  },
+] as const;
+
+// ERC20 transfer ABI
 const ERC20_ABI = [
   {
     name: "transfer",
@@ -17,7 +28,19 @@ const ERC20_ABI = [
     ],
     outputs: [{ type: "bool" }],
   },
+  {
+    name: "balanceOf",
+    type: "function",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
+
+// Token addresses on Sepolia
+const TOKENS = {
+  USDC: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as const,
+};
 
 export interface ExecutionResult {
   success: boolean;
@@ -25,36 +48,139 @@ export interface ExecutionResult {
   error?: string;
   timestamp: number;
   amount: string;
+  action: string;
 }
 
 /**
- * Execute a transaction using the agent's granted permission
- * This demonstrates real ERC-7715 permission usage
+ * Execute DCA - swap/transfer tokens on schedule
  */
-export async function executeAgentTransaction(
+export async function executeDCA(
   agentPrivateKey: `0x${string}`,
-  recipientAddress: `0x${string}`,
   amount: string,
   token: "ETH" | "USDC"
+): Promise<ExecutionResult> {
+  // For demo: DCA just sends to a "swap" address (simulating DEX)
+  const swapAddress = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
+  return executeTransfer(agentPrivateKey, swapAddress, amount, token, "dca");
+}
+
+/**
+ * Execute Auto-Transfer - send tokens to recipient
+ */
+export async function executeAutoTransfer(
+  agentPrivateKey: `0x${string}`,
+  recipient: `0x${string}`,
+  amount: string,
+  token: "ETH" | "USDC"
+): Promise<ExecutionResult> {
+  return executeTransfer(agentPrivateKey, recipient, amount, token, "transfer");
+}
+
+/**
+ * Execute Gas Refill - top up a wallet with ETH
+ */
+export async function executeGasRefill(
+  agentPrivateKey: `0x${string}`,
+  walletToRefill: `0x${string}`,
+  amount: string
+): Promise<ExecutionResult> {
+  return executeTransfer(agentPrivateKey, walletToRefill, amount, "ETH", "gas-refill");
+}
+
+/**
+ * Execute Vault Deposit - deposit to vault contract
+ */
+export async function executeVaultDeposit(
+  agentPrivateKey: `0x${string}`,
+  vaultAddress: `0x${string}`,
+  amount: string
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
 
   try {
-    // For demo: we'll use viem to sign and send a transaction
-    // In production, this would go through the Pimlico bundler with the permission context
-    
     const { privateKeyToAccount } = await import("viem/accounts");
     const { createWalletClient } = await import("viem");
     
     const account = privateKeyToAccount(agentPrivateKey);
     
+    const walletClient = createWalletClient({
+      account,
+      chain: sepolia,
+      transport: http(),
+    });
+
     const publicClient = createPublicClient({
       chain: sepolia,
       transport: http(),
     });
 
+    // Call vault deposit function with ETH value
+    const txHash = await walletClient.sendTransaction({
+      to: vaultAddress,
+      value: parseEther(amount),
+      data: encodeFunctionData({
+        abi: VAULT_ABI,
+        functionName: "deposit",
+      }),
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    // Store execution
+    storeExecution({
+      hash: txHash,
+      timestamp,
+      amount,
+      token: "ETH",
+      action: "vault-deposit",
+      recipient: vaultAddress,
+      status: receipt.status === "success" ? "success" : "failed",
+    });
+
+    return {
+      success: receipt.status === "success",
+      txHash,
+      timestamp,
+      amount,
+      action: "vault-deposit",
+    };
+  } catch (error: any) {
+    console.error("Vault deposit error:", error);
+    return {
+      success: false,
+      error: error.message || "Vault deposit failed",
+      timestamp,
+      amount,
+      action: "vault-deposit",
+    };
+  }
+}
+
+/**
+ * Generic transfer execution
+ */
+async function executeTransfer(
+  agentPrivateKey: `0x${string}`,
+  recipient: `0x${string}`,
+  amount: string,
+  token: "ETH" | "USDC",
+  action: string
+): Promise<ExecutionResult> {
+  const timestamp = Date.now();
+
+  try {
+    const { privateKeyToAccount } = await import("viem/accounts");
+    const { createWalletClient } = await import("viem");
+    
+    const account = privateKeyToAccount(agentPrivateKey);
+    
     const walletClient = createWalletClient({
       account,
+      chain: sepolia,
+      transport: http(),
+    });
+
+    const publicClient = createPublicClient({
       chain: sepolia,
       transport: http(),
     });
@@ -62,103 +188,69 @@ export async function executeAgentTransaction(
     let txHash: `0x${string}`;
 
     if (token === "ETH") {
-      // Native ETH transfer
       txHash = await walletClient.sendTransaction({
-        to: recipientAddress,
+        to: recipient,
         value: parseEther(amount),
       });
     } else {
-      // ERC20 transfer (USDC on Sepolia)
-      const USDC_ADDRESS = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as const;
-      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1e6)); // USDC has 6 decimals
-      
+      const amountInUnits = BigInt(Math.floor(parseFloat(amount) * 1e6));
       txHash = await walletClient.sendTransaction({
-        to: USDC_ADDRESS,
+        to: TOKENS.USDC,
         data: encodeFunctionData({
           abi: ERC20_ABI,
           functionName: "transfer",
-          args: [recipientAddress, amountInUnits],
+          args: [recipient, amountInUnits],
         }),
       });
     }
 
-    // Wait for confirmation
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Store execution in localStorage
-    const executions = JSON.parse(localStorage.getItem("leash_executions") || "[]");
-    executions.push({
+    // Store execution
+    storeExecution({
       hash: txHash,
       timestamp,
       amount,
       token,
-      recipient: recipientAddress,
+      action,
+      recipient,
       status: receipt.status === "success" ? "success" : "failed",
     });
-    localStorage.setItem("leash_executions", JSON.stringify(executions));
 
     return {
       success: receipt.status === "success",
       txHash,
       timestamp,
       amount,
+      action,
     };
   } catch (error: any) {
-    console.error("Agent execution error:", error);
+    console.error(`${action} execution error:`, error);
     return {
       success: false,
-      error: error.message || "Execution failed",
+      error: error.message || `${action} failed`,
       timestamp,
       amount,
+      action,
     };
   }
 }
 
 /**
- * Execute using ERC-7715 permission context via Pimlico
- * This is the proper way to execute with delegated permissions
- * Note: This requires the full Smart Accounts Kit setup
+ * Store execution in localStorage
  */
-export async function executeWithPermission(
-  permissionContext: any,
-  agentPrivateKey: `0x${string}`,
-  calls: Array<{ to: `0x${string}`; value?: bigint; data?: `0x${string}` }>
-): Promise<ExecutionResult> {
-  const timestamp = Date.now();
-
-  try {
-    // For hackathon demo, we use direct transaction execution
-    // In production, this would use the full ERC-7715 permission context
-    console.log("Permission context:", permissionContext);
-    console.log("Calls:", calls);
-    
-    // Execute the first call directly for demo
-    if (calls.length > 0) {
-      const call = calls[0];
-      const result = await executeAgentTransaction(
-        agentPrivateKey,
-        call.to,
-        call.value ? (Number(call.value) / 1e18).toString() : "0",
-        "ETH"
-      );
-      return result;
-    }
-
-    return {
-      success: false,
-      error: "No calls provided",
-      timestamp,
-      amount: "0",
-    };
-  } catch (error: any) {
-    console.error("Permission execution error:", error);
-    return {
-      success: false,
-      error: error.message || "Permission execution failed",
-      timestamp,
-      amount: "0",
-    };
-  }
+function storeExecution(execution: {
+  hash: string;
+  timestamp: number;
+  amount: string;
+  token: string;
+  action: string;
+  recipient: string;
+  status: string;
+}) {
+  const executions = JSON.parse(localStorage.getItem("leash_executions") || "[]");
+  executions.push(execution);
+  localStorage.setItem("leash_executions", JSON.stringify(executions));
 }
 
 /**
@@ -173,11 +265,9 @@ export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: st
 
     const ethBalance = await publicClient.getBalance({ address });
     
-    // Get USDC balance
-    const USDC_ADDRESS = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
     const usdcBalance = await publicClient.readContract({
-      address: USDC_ADDRESS,
-      abi: [{ name: "balanceOf", type: "function", inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }] }],
+      address: TOKENS.USDC,
+      abi: ERC20_ABI,
       functionName: "balanceOf",
       args: [address],
     }) as bigint;
@@ -189,5 +279,27 @@ export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: st
   } catch (error) {
     console.error("Balance fetch error:", error);
     return { eth: "0", usdc: "0" };
+  }
+}
+
+/**
+ * Check if wallet needs gas refill
+ */
+export async function checkNeedsRefill(
+  address: `0x${string}`,
+  threshold: string
+): Promise<boolean> {
+  try {
+    const publicClient = createPublicClient({
+      chain: sepolia,
+      transport: http(),
+    });
+
+    const balance = await publicClient.getBalance({ address });
+    const thresholdWei = parseEther(threshold);
+    
+    return balance < thresholdWei;
+  } catch {
+    return false;
   }
 }

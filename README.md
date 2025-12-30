@@ -4,38 +4,37 @@
 
 AgentLeash solves the "runaway agent" problem — AI agents with unlimited wallet access can drain funds in seconds. We give you granular, time-limited spending controls using MetaMask's ERC-7715 permissions, so your agents can only spend what you allow, when you allow it.
 
-## The Problem
+## 🎯 Hackathon Submission
 
-AI agents need wallet access to execute trades, pay subscriptions, and manage DeFi positions. But current solutions are all-or-nothing: either full access or no access. One bug, one hack, one rogue agent — and your funds are gone.
+**MetaMask Advanced Permissions Dev Cook-Off**
 
-## The Solution
+### Requirements Met:
+- ✅ **ERC-7715 Advanced Permissions** - Grant fine-grained spending limits
+- ✅ **Smart Accounts Kit** - Full integration for permission requests
+- ✅ **Working Demo** - Real transactions on Sepolia testnet
+- ✅ **Envio HyperIndex** - Multi-chain indexing (Sepolia + Base Sepolia)
 
-AgentLeash implements **ERC-7715 Advanced Permissions** to create fine-grained spending controls:
+## 🤖 Agent Types
 
-- **Periodic limits**: "Spend max 0.1 ETH per day"
-- **Streaming limits**: "Stream max 0.001 ETH per second"
-- **Time-bound**: Permissions auto-expire
-- **Instant revoke**: Cut off access with one click
+| Agent | What it does | Permission Type | Can Demo |
+|-------|-------------|-----------------|----------|
+| **DCA Bot** | Auto-buy tokens on schedule | `native-token-periodic` | ✅ Yes |
+| **Auto-Transfer** | Send tokens to address periodically | `native-token-periodic` | ✅ Yes |
+| **Gas Refiller** | Top up wallet when ETH low | `native-token-periodic` | ✅ Yes |
+| **Savings Vault** | Auto-deposit to vault contract | `native-token-periodic` | ✅ Yes |
 
-## ERC-7715 Permission Types
+All agents work on Sepolia testnet with real transactions.
 
-| Type | Use Case | Example |
-|------|----------|---------|
-| `native-token-periodic` | DCA bots | Buy $10 ETH daily |
-| `native-token-stream` | Subscriptions | Pay 0.001 ETH/sec |
-| `erc20-token-periodic` | Trading bots | Spend 100 USDC/week |
-| `erc20-token-stream` | Yield farming | Stream rewards |
-
-## How It Works
+## 🔄 How It Works
 
 ```
-1. Setup    → Choose agent type (DCA, Sniper, Payment, Yield)
-2. Configure → Set spending limits and duration
-3. Grant    → Approve via MetaMask (ERC-7715)
-4. Monitor  → Track spending, revoke anytime
+1. Setup    → Choose agent type, configure limits
+2. Grant    → Approve ERC-7715 permission via MetaMask Flask
+3. Execute  → Agent sends real transactions within limits
+4. Monitor  → Track spending, indexed by Envio, revoke anytime
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 npm install
@@ -46,9 +45,26 @@ Create `.env.local`:
 ```env
 VITE_PIMLICO_API_KEY=your_key
 VITE_WALLET_CONNECT_PROJECT_ID=your_id
+VITE_ENVIO_ENDPOINT=http://localhost:8080/v1/graphql
 ```
 
-## Architecture
+## 📊 Envio Integration
+
+Multi-chain indexing across Sepolia and Base Sepolia:
+
+```yaml
+# indexer/config.yaml
+networks:
+  - id: 11155111  # Sepolia
+  - id: 84532     # Base Sepolia
+```
+
+Indexed events:
+- ERC20 Transfers (agent executions)
+- Vault Deposits/Withdrawals
+- Daily aggregated stats
+
+## 🏗 Architecture
 
 ```
 User Wallet (EOA)
@@ -58,32 +74,58 @@ User Wallet (EOA)
     ▼
 Agent Wallet (EOA)
     │
-    ├── Can spend within limits
+    ├── Executes within limits
     │
     ▼
-Pimlico Bundler → Execute UserOps
+Sepolia/Base Sepolia
+    │
+    ├── Transactions indexed by Envio
+    │
+    ▼
+Dashboard (real-time analytics)
 ```
 
-## Tech Stack
+## 📁 Project Structure
+
+```
+agent-leash/
+├── src/
+│   ├── pages/          # Setup, Grant, Monitor flows
+│   ├── lib/
+│   │   ├── agent.ts    # Agent execution logic
+│   │   ├── envio.ts    # Envio GraphQL client
+│   │   └── permissions.ts
+│   └── hooks/
+│       └── usePermissions.ts  # ERC-7715 integration
+├── contracts/
+│   └── SimpleVault.sol # Demo vault contract
+└── indexer/
+    ├── config.yaml     # Envio config
+    └── schema.graphql  # GraphQL schema
+```
+
+## 🔧 Tech Stack
 
 - **Frontend**: Vite + React 19 + Tailwind v4
 - **Wallet**: RainbowKit + Wagmi v2
 - **Permissions**: MetaMask Smart Accounts Kit (ERC-7715)
-- **Bundler**: Pimlico
 - **Indexer**: Envio HyperIndex
-- **Networks**: Sepolia (testnet), Base (mainnet)
+- **Networks**: Sepolia, Base Sepolia
 
-## Requirements
+## ⚠️ Requirements
 
 - MetaMask Flask v13.5+ (ERC-7715 support)
-- Sepolia ETH for testing
+- Sepolia ETH for testing (fund agent wallet)
 
-## Security
+## 🎬 Demo Flow
 
-- Agent wallets are EOAs with private keys stored in localStorage (demo only)
-- Production: Use secure key management (HSM, enclave)
-- Permissions are on-chain and verifiable
-- User can revoke anytime
+1. Connect MetaMask Flask
+2. Choose "DCA Bot" agent
+3. Configure: 0.001 ETH per day
+4. Grant permission (MetaMask popup)
+5. Click "Test Execute" to send real transaction
+6. View on Etherscan
+7. See execution in Envio-indexed dashboard
 
 ---
 

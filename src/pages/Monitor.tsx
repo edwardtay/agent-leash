@@ -13,7 +13,13 @@ import {
   formatTimeRemaining,
   type PermissionWithHealth,
 } from "../lib/permissions";
-import { executeAgentTransaction, getAgentBalance } from "../lib/agent";
+import { 
+  executeDCA, 
+  executeAutoTransfer, 
+  executeGasRefill, 
+  executeVaultDeposit,
+  getAgentBalance 
+} from "../lib/agent";
 import { checkEnvioHealth } from "../lib/envio";
 
 const COLORS = { primary: "#22c55e", warning: "#eab308", danger: "#ef4444" };
@@ -74,21 +80,33 @@ export function Monitor() {
 
     setIsExecuting(true);
     try {
-      // For demo: send a small amount to a test address
-      const testRecipient = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
-      const amount = "0.0001"; // Very small amount for demo
-      
-      const result = await executeAgentTransaction(
-        privateKey,
-        testRecipient,
-        amount,
-        setup.token === "ETH" || setup.token === "WETH" ? "ETH" : "USDC"
-      );
+      const amount = "0.0001"; // Small amount for demo
+      const token = setup.token === "ETH" ? "ETH" : "USDC";
+      let result;
+
+      switch (setup.agentType) {
+        case "dca":
+          result = await executeDCA(privateKey, amount, token as "ETH" | "USDC");
+          break;
+        case "transfer":
+          const recipient = setup.recipient || "0x000000000000000000000000000000000000dEaD";
+          result = await executeAutoTransfer(privateKey, recipient as `0x${string}`, amount, token as "ETH" | "USDC");
+          break;
+        case "gas":
+          const walletToRefill = setup.recipient || "0x000000000000000000000000000000000000dEaD";
+          result = await executeGasRefill(privateKey, walletToRefill as `0x${string}`, amount);
+          break;
+        case "vault":
+          const vaultAddress = setup.recipient || "0x000000000000000000000000000000000000dEaD";
+          result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, amount);
+          break;
+        default:
+          result = await executeDCA(privateKey, amount, token as "ETH" | "USDC");
+      }
 
       setLastExecution(result);
       
       if (result.success) {
-        // Refresh balance
         getAgentBalance(setup.agentWallet as `0x${string}`).then(setAgentBalance);
         setStats(getDashboardStats());
       }
