@@ -163,6 +163,7 @@ export const usePermissions = () => {
         }
 
         const permission = await client.requestExecutionPermissions([permissionRequest]);
+        console.log("Permission response:", JSON.stringify(permission, null, 2));
         setGrantedPermissions(permission);
 
         // Store permission in localStorage
@@ -174,6 +175,7 @@ export const usePermissions = () => {
           expiry,
         });
         localStorage.setItem("leash_permissions", JSON.stringify(storedPermissions));
+        console.log("Stored permission:", storedPermissions[storedPermissions.length - 1]);
 
         return permission;
       } catch (err: any) {

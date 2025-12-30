@@ -105,6 +105,7 @@ export async function executeVaultDeposit(
     }
 
     const permissionResponse = storedPerm.permission?.[0];
+    console.log("Permission response for execution:", permissionResponse);
     if (!permissionResponse) {
       return {
         success: false,
@@ -117,6 +118,8 @@ export async function executeVaultDeposit(
 
     const permissionsContext = permissionResponse.permissionsContext as Hex;
     const delegationManager = permissionResponse.signerMeta?.delegationManager as Hex;
+    console.log("permissionsContext:", permissionsContext);
+    console.log("delegationManager:", delegationManager);
 
     if (!permissionsContext || !delegationManager) {
       // Fallback to direct execution if no delegation context
