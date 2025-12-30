@@ -43,7 +43,7 @@ let makeGeneratedConfig = () => {
       let chain = ChainMap.Chain.makeUnsafe(~chainId=84532)
       {
         Config.maxReorgDepth: 200,
-        startBlock: 19000000,
+        startBlock: 22000000,
         id: 84532,
         contracts,
         sources: NetworkSources.evm(~chain, ~contracts=[{name: "SimpleVault",events: [Types.SimpleVault.Deposit.register(), Types.SimpleVault.Withdrawal.register()],abi: Types.SimpleVault.abi}], ~hyperSync=Some("https://84532.hypersync.xyz"), ~allEventSignatures=[Types.SimpleVault.eventSignatures]->Belt.Array.concatMany, ~shouldUseHypersyncClientDecoder=true, ~rpcs=[], ~lowercaseAddresses=false)
@@ -68,7 +68,7 @@ let makeGeneratedConfig = () => {
       let chain = ChainMap.Chain.makeUnsafe(~chainId=11155111)
       {
         Config.maxReorgDepth: 200,
-        startBlock: 7400000,
+        startBlock: 9940000,
         id: 11155111,
         contracts,
         sources: NetworkSources.evm(~chain, ~contracts=[{name: "SimpleVault",events: [Types.SimpleVault.Deposit.register(), Types.SimpleVault.Withdrawal.register()],abi: Types.SimpleVault.abi}], ~hyperSync=Some("https://11155111.hypersync.xyz"), ~allEventSignatures=[Types.SimpleVault.eventSignatures]->Belt.Array.concatMany, ~shouldUseHypersyncClientDecoder=true, ~rpcs=[], ~lowercaseAddresses=false)

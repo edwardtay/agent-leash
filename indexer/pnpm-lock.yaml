@@ -7,9 +7,9 @@ settings:
 importers:
 
   .:
-    devDependencies:
+    dependencies:
       envio:
-        specifier: ^2.32.3
+        specifier: 2.32.3
         version: 2.32.3
 
 packages:
