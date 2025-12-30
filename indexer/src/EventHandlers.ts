@@ -1,7 +1,7 @@
 const { SimpleVault } = require("generated");
 
 // Handle Deposit events
-SimpleVault.Deposit.handler(async ({ event, context }) => {
+SimpleVault.Deposit.handler(async ({ event, context }: { event: any; context: any }) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultDeposit.set({
@@ -40,7 +40,7 @@ SimpleVault.Deposit.handler(async ({ event, context }) => {
 });
 
 // Handle Withdrawal events
-SimpleVault.Withdrawal.handler(async ({ event, context }) => {
+SimpleVault.Withdrawal.handler(async ({ event, context }: { event: any; context: any }) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultWithdrawal.set({
