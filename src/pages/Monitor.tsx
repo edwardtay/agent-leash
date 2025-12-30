@@ -21,11 +21,13 @@ import {
   getAgentBalance 
 } from "../lib/agent";
 import { checkEnvioHealth } from "../lib/envio";
+import { useSessionAccount } from "../providers/SessionAccountProvider";
 
 const COLORS = { primary: "#22c55e", warning: "#eab308", danger: "#ef4444" };
 
 export function Monitor() {
   const { isConnected } = useAccount();
+  const { exportPrivateKey } = useSessionAccount();
   const navigate = useNavigate();
   
   const [setup, setSetup] = useState<any>(null);
@@ -35,6 +37,7 @@ export function Monitor() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [lastExecution, setLastExecution] = useState<any>(null);
   const [envioStatus, setEnvioStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [showExportKey, setShowExportKey] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("leash_agent_setup");
@@ -236,12 +239,27 @@ export function Monitor() {
                 {/* Agent Wallet & Balance */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
-                    <p className="text-[10px] text-[var(--text-muted)]">Agent Wallet</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-[var(--text-muted)]">Agent Wallet (EOA)</p>
+                      <button
+                        onClick={() => setShowExportKey(!showExportKey)}
+                        className="text-[10px] text-[var(--primary)] hover:underline"
+                      >
+                        {showExportKey ? "Hide" : "Export"} Key
+                      </button>
+                    </div>
                     <p className="font-mono text-xs truncate">{setup.agentWallet}</p>
+                    {showExportKey && (
+                      <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                        <p className="text-[10px] text-yellow-400 mb-1">⚠️ Keep this secret!</p>
+                        <p className="font-mono text-[10px] break-all select-all">{exportPrivateKey()}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
                     <p className="text-[10px] text-[var(--text-muted)]">Agent Balance</p>
                     <p className="text-sm font-medium">{agentBalance.eth} ETH • {agentBalance.usdc} USDC</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Fund this wallet to enable agent</p>
                   </div>
                 </div>
               </div>

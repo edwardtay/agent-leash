@@ -5,12 +5,14 @@ interface SessionAccountContextType {
   sessionAccount: ReturnType<typeof privateKeyToAccount> | null;
   isReady: boolean;
   regenerateAccount: () => void;
+  exportPrivateKey: () => string | null;
 }
 
 const SessionAccountContext = createContext<SessionAccountContextType>({
   sessionAccount: null,
   isReady: false,
   regenerateAccount: () => {},
+  exportPrivateKey: () => null,
 });
 
 export const useSessionAccount = () => useContext(SessionAccountContext);
@@ -42,12 +44,16 @@ export const SessionAccountProvider = ({ children }: { children: ReactNode }) =>
     setSessionAccount(account);
   };
 
+  const exportPrivateKey = (): string | null => {
+    return localStorage.getItem("session_private_key");
+  };
+
   useEffect(() => {
     createSessionAccount();
   }, []);
 
   return (
-    <SessionAccountContext.Provider value={{ sessionAccount, isReady, regenerateAccount }}>
+    <SessionAccountContext.Provider value={{ sessionAccount, isReady, regenerateAccount, exportPrivateKey }}>
       {children}
     </SessionAccountContext.Provider>
   );
