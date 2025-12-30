@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { useAccount } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSessionAccount } from "../providers/SessionAccountProvider";
+import { getVaultAddress } from "../config/contracts";
 
 type AgentType = "dca" | "transfer" | "gas" | "vault";
 
@@ -69,6 +70,7 @@ const AGENT_CONFIG: Record<AgentType, {
 export function SetupAgent() {
   const { agentType } = useParams<{ agentType: string }>();
   const { isConnected } = useAccount();
+  const chainId = useChainId();
   const { sessionAccount, isReady } = useSessionAccount();
   const navigate = useNavigate();
 
@@ -78,6 +80,15 @@ export function SetupAgent() {
   const [selectedToken, setSelectedToken] = useState<keyof typeof TOKENS>("ETH");
   const [recipient, setRecipient] = useState("");
   
+  // Auto-fill vault address for vault agent
+  useEffect(() => {
+    if (agentType === "vault" && chainId) {
+      const vaultAddr = getVaultAddress(chainId);
+      if (vaultAddr && vaultAddr !== "0x0000000000000000000000000000000000000000") {
+        setRecipient(vaultAddr);
+      }
+    }
+  }, [agentType, chainId]);
   // Agent Execution Schedule
   const [execFrequency, setExecFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
   const [execAmount, setExecAmount] = useState("0.001");
@@ -232,7 +243,12 @@ export function SetupAgent() {
                 placeholder={config.recipientPlaceholder}
                 className="w-full px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono text-xs"
               />
-              {config.isContract && (
+              {config.isContract && recipient && (
+                <p className="text-[10px] text-green-400 mt-2">
+                  ✓ Using deployed SimpleVault on {chainId === 11155111 ? "Sepolia" : chainId === 84532 ? "Base Sepolia" : "current network"}
+                </p>
+              )}
+              {config.isContract && !recipient && (
                 <p className="text-[10px] text-[var(--text-muted)] mt-2">
                   Agent will call deposit() on this contract
                 </p>

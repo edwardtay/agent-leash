@@ -134,7 +134,7 @@ export function SetupSelect() {
         {/* Networks */}
         <div className="mt-4 p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
           <p className="text-xs text-[var(--text-muted)]">
-            <span className="text-[var(--primary)]">Network:</span> Sepolia testnet — 
+            <span className="text-[var(--primary)]">Networks:</span> Sepolia • Base Sepolia — 
             Transactions indexed by Envio HyperIndex
           </p>
         </div>
