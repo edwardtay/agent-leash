@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { SimpleVault } from "../generated/index.js";
+import generated from "../generated/index.js";
+const { SimpleVault } = generated;
 
 // Handle Deposit events
 SimpleVault.Deposit.handler(async ({ event, context }) => {
