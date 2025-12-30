@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAccount } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSessionAccount } from "../providers/SessionAccountProvider";
 import { usePermissions, type PermissionConfig, type TokenKey } from "../hooks/usePermissions";
+import { AddressDisplay } from "../components/AddressDisplay";
 
 interface AgentSetup {
   agentType: string;
@@ -39,6 +40,7 @@ const FREQ_SECONDS: Record<string, number> = { hourly: 3600, daily: 86400, weekl
 
 export function Grant() {
   const { isConnected } = useAccount();
+  const chainId = useChainId();
   const { sessionAccount } = useSessionAccount();
   const { requestPermission, isLoading, error, grantedPermissions, setError } = usePermissions();
   const navigate = useNavigate();
@@ -135,8 +137,8 @@ export function Grant() {
             <p className="text-sm text-[var(--text-muted)]">Token: {setup.token}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[var(--text-muted)]">Agent Wallet</p>
-            <p className="font-mono text-xs">{setup.agentWallet.slice(0, 10)}...{setup.agentWallet.slice(-8)}</p>
+            <p className="text-xs text-[var(--text-muted)] mb-1">Agent Wallet</p>
+            <AddressDisplay address={setup.agentWallet} chainId={chainId} />
           </div>
         </div>
 

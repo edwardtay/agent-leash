@@ -4,6 +4,7 @@ import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSessionAccount } from "../providers/SessionAccountProvider";
 import { getVaultAddress } from "../config/contracts";
+import { AddressDisplay } from "../components/AddressDisplay";
 
 type AgentType = "dca" | "transfer" | "gas" | "vault";
 
@@ -403,8 +404,8 @@ export function SetupAgent() {
         <div className="flex items-center gap-4">
           {isReady && sessionAccount && (
             <div className="flex-1 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <span className="text-xs text-[var(--text-muted)]">Agent Wallet: </span>
-              <span className="font-mono text-xs">{sessionAccount.address}</span>
+              <span className="text-xs text-[var(--text-muted)] mr-2">Agent Wallet:</span>
+              <AddressDisplay address={sessionAccount.address} chainId={chainId} />
             </div>
           )}
           <button

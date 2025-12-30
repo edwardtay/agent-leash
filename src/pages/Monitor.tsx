@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAccount } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
   AreaChart, Area, PieChart, Pie, Cell,
@@ -22,11 +22,13 @@ import {
 } from "../lib/agent";
 import { checkEnvioHealth } from "../lib/envio";
 import { useSessionAccount } from "../providers/SessionAccountProvider";
+import { AddressDisplay } from "../components/AddressDisplay";
 
 const COLORS = { primary: "#22c55e", warning: "#eab308", danger: "#ef4444" };
 
 export function Monitor() {
   const { isConnected } = useAccount();
+  const chainId = useChainId();
   const { exportPrivateKey } = useSessionAccount();
   const navigate = useNavigate();
   
@@ -239,7 +241,7 @@ export function Monitor() {
                 {/* Agent Wallet & Balance */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-1">
                       <p className="text-[10px] text-[var(--text-muted)]">Agent Wallet (EOA)</p>
                       <button
                         onClick={() => setShowExportKey(!showExportKey)}
@@ -248,7 +250,7 @@ export function Monitor() {
                         {showExportKey ? "Hide" : "Export"} Key
                       </button>
                     </div>
-                    <p className="font-mono text-xs truncate">{setup.agentWallet}</p>
+                    <AddressDisplay address={setup.agentWallet} chainId={chainId} truncate={false} />
                     {showExportKey && (
                       <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
                         <p className="text-[10px] text-yellow-400 mb-1">⚠️ Keep this secret!</p>
