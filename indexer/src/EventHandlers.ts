@@ -1,4 +1,4 @@
-import { SimpleVault } from "../generated";
+import { SimpleVault } from "../generated/index.js";
 
 // Handle Deposit events
 SimpleVault.Deposit.handler(async ({ event, context }) => {
