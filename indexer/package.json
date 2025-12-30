@@ -8,7 +8,7 @@
     "stop": "envio stop"
   },
   "dependencies": {
-    "envio": "latest"
+    "envio": "2.32.3"
   },
   "devDependencies": {}
 }
