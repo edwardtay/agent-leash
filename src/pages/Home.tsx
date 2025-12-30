@@ -55,7 +55,7 @@ export function Home() {
         <div className="mb-12">
           <h2 className="text-xl font-semibold text-center mb-6">How It Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Step n={1} icon="🤖" title="Setup Agent" desc="Choose agent type (DCA, Sniper, Subscription, Yield) and configure spending limits" />
+            <Step n={1} icon="🤖" title="Setup Agent" desc="Choose agent type (DCA, Transfer, Gas Refiller, Vault) and configure spending limits" />
             <Step n={2} icon="🔐" title="Grant Permission" desc="Approve ERC-7715 permission via MetaMask. Permission type auto-determined by setup." />
             <Step n={3} icon="📊" title="Monitor & Revoke" desc="Track spending in real-time. Revoke access instantly if needed." />
           </div>

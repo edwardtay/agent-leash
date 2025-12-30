@@ -25,6 +25,7 @@ const AGENT_CONFIG: Record<AgentType, {
   needsRecipient: boolean;
   recipientLabel: string;
   recipientPlaceholder: string;
+  isContract?: boolean;
 }> = {
   dca: {
     name: "DCA Bot",
@@ -59,8 +60,9 @@ const AGENT_CONFIG: Record<AgentType, {
     desc: "Auto-deposit to a vault contract",
     tokens: ["ETH", "USDC"],
     needsRecipient: true,
-    recipientLabel: "Vault Contract",
-    recipientPlaceholder: "0x... (vault address)",
+    recipientLabel: "Vault Contract Address",
+    recipientPlaceholder: "0x... (deployed vault contract)",
+    isContract: true,
   },
 };
 
@@ -219,7 +221,10 @@ export function SetupAgent() {
           </div>
           {config.needsRecipient && (
             <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">{config.recipientLabel}</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-2">
+                {config.recipientLabel}
+                {config.isContract && <span className="ml-1 text-yellow-400">(smart contract)</span>}
+              </label>
               <input
                 type="text"
                 value={recipient}
@@ -227,6 +232,11 @@ export function SetupAgent() {
                 placeholder={config.recipientPlaceholder}
                 className="w-full px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono text-xs"
               />
+              {config.isContract && (
+                <p className="text-[10px] text-[var(--text-muted)] mt-2">
+                  Agent will call deposit() on this contract
+                </p>
+              )}
             </div>
           )}
         </div>

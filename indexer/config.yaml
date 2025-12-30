@@ -1,8 +1,8 @@
 # AgentLeash Indexer Configuration
-# Multi-chain agent execution analytics with Envio HyperIndex
+# Agent execution analytics with Envio HyperIndex
 
 name: agentleash-indexer
-description: Track AI agent executions and vault deposits across Sepolia and Base Sepolia
+description: Track AI agent executions and vault deposits on Sepolia
 
 contracts:
   # ERC-20 Transfer events for token tracking
@@ -19,7 +19,7 @@ contracts:
       - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
 
 networks:
-  # Sepolia (primary testnet)
+  # Sepolia testnet
   - id: 11155111
     start_block: 7000000
     contracts:
@@ -30,23 +30,7 @@ networks:
         # Deploy and update this address
         address: "0x0000000000000000000000000000000000000000"
 
-  # Base Sepolia (secondary testnet)
-  - id: 84532
-    start_block: 15000000
-    contracts:
-      - name: ERC20
-        # USDC on Base Sepolia
-        address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
-      - name: SimpleVault
-        # Deploy and update this address
-        address: "0x0000000000000000000000000000000000000000"
-
 rollback_on_reorg: true
-
-hypersync:
-  enabled: true
-  # Base Sepolia has HyperSync support
-  supported_chains: [84532]
 
 sync_config:
   initial_block_interval: 10000

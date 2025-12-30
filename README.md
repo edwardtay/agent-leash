@@ -12,7 +12,7 @@ AgentLeash solves the "runaway agent" problem — AI agents with unlimited walle
 - ✅ **ERC-7715 Advanced Permissions** - Grant fine-grained spending limits
 - ✅ **Smart Accounts Kit** - Full integration for permission requests
 - ✅ **Working Demo** - Real transactions on Sepolia testnet
-- ✅ **Envio HyperIndex** - Multi-chain indexing (Sepolia + Base Sepolia)
+- ✅ **Envio HyperIndex** - Transaction indexing on Sepolia
 
 ## 🤖 Agent Types
 
@@ -50,13 +50,12 @@ VITE_ENVIO_ENDPOINT=http://localhost:8080/v1/graphql
 
 ## 📊 Envio Integration
 
-Multi-chain indexing across Sepolia and Base Sepolia:
+Transaction indexing on Sepolia:
 
 ```yaml
 # indexer/config.yaml
 networks:
   - id: 11155111  # Sepolia
-  - id: 84532     # Base Sepolia
 ```
 
 Indexed events:
@@ -77,7 +76,7 @@ Agent Wallet (EOA)
     ├── Executes within limits
     │
     ▼
-Sepolia/Base Sepolia
+Sepolia Testnet
     │
     ├── Transactions indexed by Envio
     │
@@ -110,7 +109,7 @@ agent-leash/
 - **Wallet**: RainbowKit + Wagmi v2
 - **Permissions**: MetaMask Smart Accounts Kit (ERC-7715)
 - **Indexer**: Envio HyperIndex
-- **Networks**: Sepolia, Base Sepolia
+- **Network**: Sepolia testnet
 
 ## ⚠️ Requirements
 

@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
-// Realistic agents that can actually work on Sepolia
 const AGENTS = [
   {
     id: "dca",
@@ -12,7 +11,6 @@ const AGENTS = [
     permTypes: ["native-token-periodic", "erc20-token-periodic"],
     tokens: ["ETH", "USDC"],
     example: "Swap 0.01 ETH to USDC every day",
-    canDemo: true,
   },
   {
     id: "transfer",
@@ -22,7 +20,6 @@ const AGENTS = [
     permTypes: ["native-token-periodic", "erc20-token-periodic"],
     tokens: ["ETH", "USDC"],
     example: "Send 0.005 ETH to savings wallet daily",
-    canDemo: true,
   },
   {
     id: "gas",
@@ -32,7 +29,6 @@ const AGENTS = [
     permTypes: ["native-token-periodic"],
     tokens: ["ETH"],
     example: "Refill bot wallet with 0.01 ETH when < 0.005",
-    canDemo: true,
   },
   {
     id: "vault",
@@ -42,7 +38,7 @@ const AGENTS = [
     permTypes: ["native-token-periodic", "erc20-token-periodic"],
     tokens: ["ETH", "USDC"],
     example: "Deposit 0.01 ETH to vault weekly",
-    canDemo: true,
+    contractRequired: true,
   },
 ];
 
@@ -78,12 +74,7 @@ export function SetupSelect() {
               <div className="flex items-start gap-4">
                 <span className="text-4xl">{agent.icon}</span>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-lg group-hover:text-[var(--primary)]">{agent.name}</h3>
-                    {agent.canDemo && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">Works on Sepolia</span>
-                    )}
-                  </div>
+                  <h3 className="font-semibold text-lg group-hover:text-[var(--primary)]">{agent.name}</h3>
                   <p className="text-sm text-[var(--text-muted)] mt-1">{agent.desc}</p>
                   
                   {/* Permission types */}
@@ -143,8 +134,8 @@ export function SetupSelect() {
         {/* Networks */}
         <div className="mt-4 p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
           <p className="text-xs text-[var(--text-muted)]">
-            <span className="text-[var(--primary)]">Networks:</span> Sepolia (testnet) • Base Sepolia (testnet) — 
-            Transactions indexed by Envio HyperIndex across both chains
+            <span className="text-[var(--primary)]">Network:</span> Sepolia testnet — 
+            Transactions indexed by Envio HyperIndex
           </p>
         </div>
       </div>
