@@ -148,7 +148,12 @@ export function getDashboardStats() {
   };
 }
 
-export function revokePermission(index: number): boolean {
+/**
+ * Mark permission as revoked locally.
+ * Note: ERC-7715 permissions are expiry-based. True on-chain revoke requires
+ * calling disableDelegation on the DelegationManager contract.
+ */
+export function revokePermissionLocal(index: number): boolean {
   try {
     const permissions = JSON.parse(localStorage.getItem("leash_permissions") || "[]");
     if (index >= 0 && index < permissions.length) {
@@ -162,6 +167,24 @@ export function revokePermission(index: number): boolean {
     return false;
   }
 }
+
+/**
+ * Get the delegation data needed for on-chain revoke
+ */
+export function getPermissionDelegation(index: number): any | null {
+  try {
+    const permissions = JSON.parse(localStorage.getItem("leash_permissions") || "[]");
+    if (index >= 0 && index < permissions.length) {
+      return permissions[index].permission;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Legacy alias
+export const revokePermission = revokePermissionLocal;
 
 export function formatTimeRemaining(seconds: number): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;

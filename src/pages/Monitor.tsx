@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useWalletClient } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { encodeFunctionData } from "viem";
 import {
   getPermissionsWithHealth,
-  revokePermission,
+  revokePermissionLocal,
+  getPermissionDelegation,
   formatTimeRemaining,
   getExecutions,
   type PermissionWithHealth,
@@ -50,6 +52,7 @@ interface AgentSetup {
 export function Monitor() {
   const { isConnected } = useAccount();
   const chainId = useChainId();
+  const { data: walletClient } = useWalletClient();
   const navigate = useNavigate();
   const { toasts, addToast, removeToast } = useToast();
   
@@ -58,6 +61,7 @@ export function Monitor() {
   const [userBalance, setUserBalance] = useState({ eth: "0", usdc: "0" });
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
   const [isMultiExecuting, setIsMultiExecuting] = useState(false);
+  const [isRevoking, setIsRevoking] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<any>(null);
   const [envioStatus, setEnvioStatus] = useState<"checking" | "online" | "offline">("checking");
   const [showExportKey, setShowExportKey] = useState<string | null>(null);
@@ -76,6 +80,112 @@ export function Monitor() {
     setAgents(updated);
     localStorage.setItem("leash_agents", JSON.stringify(updated));
     addToast("info", "Agent deleted");
+  };
+
+  // Revoke permission handler - calls disableDelegation on DelegationManager
+  const handleRevokePermission = async (permissionId: string, originalIndex: number) => {
+    if (!walletClient || !userAddress) {
+      addToast("error", "Wallet not connected");
+      return;
+    }
+
+    setIsRevoking(permissionId);
+    
+    try {
+      // Get the delegation data from stored permission
+      const delegation = getPermissionDelegation(originalIndex);
+      
+      if (!delegation || !delegation[0]) {
+        // No delegation data stored - fall back to local revoke
+        // This happens for permissions granted before we stored full delegation data
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked (no on-chain data)");
+        return;
+      }
+
+      // Get the permissionsContext which contains the delegation info
+      const permissionData = delegation[0];
+      const signerMeta = permissionData.signerMeta;
+      
+      if (!signerMeta?.delegationManager) {
+        // No delegation manager - use local revoke
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked locally");
+        return;
+      }
+
+      // Get the permissionsContext which should contain the delegation
+      const permissionsContext = permissionData.permissionsContext;
+      
+      if (!permissionsContext) {
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked (no context)");
+        return;
+      }
+
+      // Decode the delegation from permissionsContext
+      const { decodeDelegations } = await import("@metamask/smart-accounts-kit/utils");
+      const { DelegationManager } = await import("@metamask/delegation-abis");
+      
+      const delegations = decodeDelegations(permissionsContext as `0x${string}`);
+      
+      if (!delegations || delegations.length === 0) {
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked (no delegation)");
+        return;
+      }
+
+      // Get the first delegation and convert salt to bigint for ABI compatibility
+      const rawDelegation = delegations[0];
+      const delegationToDisable = {
+        delegate: rawDelegation.delegate,
+        delegator: rawDelegation.delegator,
+        authority: rawDelegation.authority,
+        caveats: rawDelegation.caveats,
+        salt: BigInt(rawDelegation.salt),
+        signature: rawDelegation.signature,
+      };
+      
+      // Encode the disableDelegation call
+      const disableCalldata = encodeFunctionData({
+        abi: DelegationManager.abi,
+        functionName: "disableDelegation",
+        args: [delegationToDisable],
+      });
+
+      // Send transaction to disable the delegation
+      addToast("info", "Confirm in wallet to revoke permission...");
+      
+      const hash = await walletClient.sendTransaction({
+        to: signerMeta.delegationManager as `0x${string}`,
+        data: disableCalldata,
+      });
+
+      addToast("success", `Permission revoked on-chain! Tx: ${hash.slice(0, 10)}...`);
+      
+      // Mark as revoked locally too
+      revokePermissionLocal(originalIndex);
+      setPermissions(getPermissionsWithHealth());
+      
+    } catch (error: any) {
+      console.error("Revoke error:", error);
+      
+      // If user rejected or other error, offer local revoke
+      if (error.message?.includes("rejected") || error.message?.includes("denied")) {
+        addToast("error", "Transaction rejected");
+      } else {
+        // Fall back to local revoke
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked locally");
+      }
+    } finally {
+      setIsRevoking(null);
+    }
   };
 
   useEffect(() => {
@@ -421,14 +531,19 @@ export function Monitor() {
                 </div>
                 {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).map((p) => {
                   const originalIndex = permissions.findIndex(perm => perm.id === p.id);
+                  const isThisRevoking = isRevoking === p.id;
                   return (
                     <div key={p.id} className="p-2 border-b border-[var(--border)] last:border-0 flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</p>
                         <p className="text-[10px] text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</p>
                       </div>
-                      <button onClick={() => { revokePermission(originalIndex); setPermissions(getPermissionsWithHealth()); }} className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded">
-                        Revoke
+                      <button 
+                        onClick={() => handleRevokePermission(p.id, originalIndex)} 
+                        disabled={isThisRevoking}
+                        className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
+                      >
+                        {isThisRevoking ? "⏳" : "Revoke"}
                       </button>
                     </div>
                   );
