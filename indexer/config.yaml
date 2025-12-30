@@ -1,48 +1,22 @@
-# AgentLeash Indexer Configuration
-# Agent execution analytics with Envio HyperIndex
-
-name: agentleash-indexer
-description: Track AI agent executions and vault deposits on Sepolia and Base Sepolia
-
+name: agentleash
+description: AgentLeash - Track AI agent executions and vault deposits
+field_selection:
+  transaction_fields:
+    - "hash"
 contracts:
-  # ERC-20 Transfer events for token tracking
-  - name: ERC20
-    handler: src/handlers/ERC20Handler.ts
-    events:
-      - event: Transfer(address indexed from, address indexed to, uint256 value)
-
-  # SimpleVault events
   - name: SimpleVault
-    handler: src/handlers/VaultHandler.ts
+    handler: src/EventHandlers.ts
     events:
       - event: Deposit(address indexed user, uint256 amount, uint256 timestamp)
       - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
-
 networks:
-  # Sepolia testnet
-  - id: 11155111
-    start_block: 7000000
+  - id: 11155111 # Sepolia
+    start_block: 7400000
     contracts:
-      - name: ERC20
-        # USDC on Sepolia
-        address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
       - name: SimpleVault
-        # Deployed SimpleVault on Sepolia
         address: "0x9acec7011519F89C59d9A595f9829bBb79Ed0d4b"
-
-  # Base Sepolia testnet
-  - id: 84532
-    start_block: 18000000
+  - id: 84532 # Base Sepolia
+    start_block: 19000000
     contracts:
-      - name: ERC20
-        # USDC on Base Sepolia
-        address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
       - name: SimpleVault
-        # Deployed SimpleVault on Base Sepolia
         address: "0x93fc90a3Fb7d8c15bbaF50bFCc612B26CA8E68c8"
-
-rollback_on_reorg: true
-
-sync_config:
-  initial_block_interval: 10000
-  batch_size: 1000

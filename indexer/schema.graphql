@@ -1,57 +1,29 @@
-# AgentLeash GraphQL Schema for Envio HyperIndex
-
-type Transfer @entity {
-  id: ID!
-  from: String! @index
-  to: String! @index
-  value: BigInt!
-  token: String!
-  txHash: String!
-  blockNumber: Int!
-  timestamp: Int!
-  chain: Int!
-}
-
 type VaultDeposit @entity {
   id: ID!
   user: String! @index
   amount: BigInt!
+  timestamp: BigInt!
   txHash: String!
   blockNumber: Int!
-  timestamp: Int!
-  chain: Int!
+  chainId: Int!
 }
 
 type VaultWithdrawal @entity {
   id: ID!
   user: String! @index
   amount: BigInt!
+  timestamp: BigInt!
   txHash: String!
   blockNumber: Int!
-  timestamp: Int!
-  chain: Int!
-}
-
-type AgentExecution @entity {
-  id: ID!
-  agent: String! @index
-  action: String!
-  token: String!
-  amount: BigInt!
-  recipient: String
-  txHash: String!
-  blockNumber: Int!
-  timestamp: Int!
-  chain: Int!
+  chainId: Int!
 }
 
 type DailyStats @entity {
-  id: ID! # date-chain format
-  date: String!
-  chain: Int!
-  totalTransfers: Int!
-  totalVolume: BigInt!
+  id: ID!
+  date: String! @index
+  chainId: Int!
   totalDeposits: Int!
   totalWithdrawals: Int!
-  uniqueAgents: Int!
+  totalVolume: BigInt!
+  uniqueUsers: Int!
 }

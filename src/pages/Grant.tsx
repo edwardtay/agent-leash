@@ -10,6 +10,7 @@ interface AgentSetup {
   agentType: string;
   agentName: string;
   agentWallet: string;
+  agentPrivateKey?: string;
   token: string;
   recipient?: string;
   execution?: {
@@ -95,6 +96,16 @@ export function Grant() {
   const perm = setup.permission;
 
   if (grantedPermissions) {
+    // Save to agents list (support multiple agents)
+    const agents = JSON.parse(localStorage.getItem("leash_agents") || "[]");
+    const existingIdx = agents.findIndex((a: any) => a.agentWallet === setup.agentWallet);
+    if (existingIdx >= 0) {
+      agents[existingIdx] = setup;
+    } else {
+      agents.push(setup);
+    }
+    localStorage.setItem("leash_agents", JSON.stringify(agents));
+
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center px-4">
         <span className="text-6xl mb-4">✅</span>

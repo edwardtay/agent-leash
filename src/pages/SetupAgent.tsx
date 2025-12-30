@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useSessionAccount } from "../providers/SessionAccountProvider";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { getVaultAddress } from "../config/contracts";
 import { AddressDisplay } from "../components/AddressDisplay";
 
@@ -72,14 +72,23 @@ export function SetupAgent() {
   const { agentType } = useParams<{ agentType: string }>();
   const { isConnected } = useAccount();
   const chainId = useChainId();
-  const { sessionAccount, isReady } = useSessionAccount();
   const navigate = useNavigate();
 
   const config = AGENT_CONFIG[agentType as AgentType];
 
+  // Generate unique wallet for this agent
+  const [agentWallet, setAgentWallet] = useState<{ address: string; privateKey: string } | null>(null);
+  
   const [agentName, setAgentName] = useState("");
   const [selectedToken, setSelectedToken] = useState<keyof typeof TOKENS>("ETH");
   const [recipient, setRecipient] = useState("");
+  
+  // Generate wallet on mount
+  useEffect(() => {
+    const privateKey = generatePrivateKey();
+    const account = privateKeyToAccount(privateKey);
+    setAgentWallet({ address: account.address, privateKey });
+  }, []);
   
   // Auto-fill vault address for vault agent
   useEffect(() => {
@@ -145,16 +154,18 @@ export function SetupAgent() {
   }
 
   const handleContinue = () => {
-    if (!sessionAccount) return;
+    if (!agentWallet) return;
     if (config.needsRecipient && !recipient) {
       alert("Please enter recipient address");
       return;
     }
     
-    localStorage.setItem("leash_agent_setup", JSON.stringify({
+    // Store agent with its unique private key
+    const agentData = {
       agentType,
       agentName,
-      agentWallet: sessionAccount.address,
+      agentWallet: agentWallet.address,
+      agentPrivateKey: agentWallet.privateKey,
       token: selectedToken,
       recipient: recipient || null,
       // Execution schedule
@@ -187,7 +198,9 @@ export function SetupAgent() {
       startDate: new Date().toISOString(),
       endDate: permEndDate.toISOString(),
       createdAt: Date.now(),
-    }));
+    };
+    
+    localStorage.setItem("leash_agent_setup", JSON.stringify(agentData));
     navigate("/grant");
   };
 
@@ -402,15 +415,15 @@ export function SetupAgent() {
 
         {/* Agent Wallet & Continue */}
         <div className="flex items-center gap-4">
-          {isReady && sessionAccount && (
+          {agentWallet && (
             <div className="flex-1 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <span className="text-xs text-[var(--text-muted)] mr-2">Agent Wallet:</span>
-              <AddressDisplay address={sessionAccount.address} chainId={chainId} />
+              <span className="text-xs text-[var(--text-muted)] mr-2">Agent Wallet (new):</span>
+              <AddressDisplay address={agentWallet.address} chainId={chainId} />
             </div>
           )}
           <button
             onClick={handleContinue}
-            disabled={!isReady || !agentName || (config.needsRecipient && !recipient)}
+            disabled={!agentWallet || !agentName || (config.needsRecipient && !recipient)}
             className="px-8 py-3 bg-[var(--primary)] text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50"
           >
             Continue →

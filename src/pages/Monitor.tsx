@@ -3,122 +3,194 @@ import { useNavigate } from "react-router-dom";
 import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
-  AreaChart, Area, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer
-} from "recharts";
-import {
   getPermissionsWithHealth,
-  getDashboardStats,
   revokePermission,
   formatTimeRemaining,
+  getExecutions,
   type PermissionWithHealth,
 } from "../lib/permissions";
 import { 
-  executeDCA, 
-  executeAutoTransfer, 
-  executeGasRefill, 
   executeVaultDeposit,
-  getAgentBalance 
+  getUserSmartAccountBalance
 } from "../lib/agent";
-import { checkEnvioHealth } from "../lib/envio";
-import { useSessionAccount } from "../providers/SessionAccountProvider";
+import { checkEnvioHealth, getVaultDeposits, type VaultDeposit } from "../lib/envio";
 import { AddressDisplay } from "../components/AddressDisplay";
+import { Toast, useToast } from "../components/Toast";
+import { getVaultAddress } from "../config/contracts";
 
-const COLORS = { primary: "#22c55e", warning: "#eab308", danger: "#ef4444" };
+// Agent type icons
+const AGENT_ICONS: Record<string, string> = {
+  dca: "📈",
+  transfer: "💸",
+  gas: "⛽",
+  vault: "🏦",
+};
+
+// Chain configs
+const CHAINS = {
+  sepolia: { id: 11155111, name: "Sepolia", badge: "Sepolia", color: "blue" },
+  baseSepolia: { id: 84532, name: "Base Sepolia", badge: "Base", color: "purple" },
+};
+
+interface AgentSetup {
+  agentType: string;
+  agentName: string;
+  agentWallet: string;
+  agentPrivateKey?: string;
+  token: string;
+  recipient?: string;
+  permission?: {
+    frequency: string;
+    amount: string;
+    endDate: string;
+    type: string;
+  };
+}
 
 export function Monitor() {
   const { isConnected } = useAccount();
   const chainId = useChainId();
-  const { exportPrivateKey } = useSessionAccount();
   const navigate = useNavigate();
+  const { toasts, addToast, removeToast } = useToast();
   
-  const [setup, setSetup] = useState<any>(null);
+  const [agents, setAgents] = useState<AgentSetup[]>([]);
   const [permissions, setPermissions] = useState<PermissionWithHealth[]>([]);
-  const [stats, setStats] = useState(getDashboardStats());
-  const [agentBalance, setAgentBalance] = useState({ eth: "0", usdc: "0" });
-  const [isExecuting, setIsExecuting] = useState(false);
+  const [userBalance, setUserBalance] = useState({ eth: "0", usdc: "0" });
+  const [isExecuting, setIsExecuting] = useState<string | null>(null);
+  const [isMultiExecuting, setIsMultiExecuting] = useState(false);
   const [lastExecution, setLastExecution] = useState<any>(null);
   const [envioStatus, setEnvioStatus] = useState<"checking" | "online" | "offline">("checking");
-  const [showExportKey, setShowExportKey] = useState(false);
+  const [showExportKey, setShowExportKey] = useState<string | null>(null);
+  const [indexedDeposits, setIndexedDeposits] = useState<VaultDeposit[]>([]);
+  const [executionCounts, setExecutionCounts] = useState<Record<string, number>>({});
+  const { address: userAddress } = useAccount();
 
-  useEffect(() => {
-    const stored = localStorage.getItem("leash_agent_setup");
-    if (stored) {
-      const s = JSON.parse(stored);
-      setSetup(s);
-      // Fetch agent balance
-      if (s.agentWallet) {
-        getAgentBalance(s.agentWallet as `0x${string}`).then(setAgentBalance);
-      }
-    }
+  // Calculate stats from indexed deposits
+  const totalDeposited = indexedDeposits.reduce((sum, d) => sum + Number(d.amount) / 1e18, 0);
+  const uniqueChains = new Set(indexedDeposits.map(d => d.chainId)).size;
 
-    const load = () => {
-      setPermissions(getPermissionsWithHealth());
-      setStats(getDashboardStats());
-    };
-    load();
-    const i = setInterval(load, 5000);
-
-    // Check Envio status
-    checkEnvioHealth().then(ok => setEnvioStatus(ok ? "online" : "offline"));
-
-    return () => clearInterval(i);
-  }, []);
-
-  const handleRevoke = (index: number) => {
-    if (confirm("Revoke permission? Agent will no longer be able to spend.")) {
-      revokePermission(index);
-      setPermissions(getPermissionsWithHealth());
-      setStats(getDashboardStats());
-    }
+  // Delete agent handler
+  const handleDeleteAgent = (agentWallet: string) => {
+    if (!confirm("Delete this agent?")) return;
+    const updated = agents.filter(a => a.agentWallet !== agentWallet);
+    setAgents(updated);
+    localStorage.setItem("leash_agents", JSON.stringify(updated));
+    addToast("info", "Agent deleted");
   };
 
-  // Execute a real transaction using the agent
-  const handleExecute = async () => {
-    if (!setup) return;
+  useEffect(() => {
+    // Load agents
+    const storedAgents = JSON.parse(localStorage.getItem("leash_agents") || "[]");
+    const legacyAgent = localStorage.getItem("leash_agent_setup");
     
-    const privateKey = localStorage.getItem("session_private_key") as `0x${string}`;
+    if (legacyAgent) {
+      const legacy = JSON.parse(legacyAgent);
+      const exists = storedAgents.find((a: AgentSetup) => a.agentWallet === legacy.agentWallet);
+      if (!exists) {
+        storedAgents.push(legacy);
+        localStorage.setItem("leash_agents", JSON.stringify(storedAgents));
+      }
+    }
+    
+    setAgents(storedAgents);
+    
+    // Count executions per agent
+    const executions = getExecutions();
+    const counts: Record<string, number> = {};
+    storedAgents.forEach((agent: AgentSetup) => {
+      counts[agent.agentWallet] = executions.filter((e: any) => e.recipient === agent.recipient).length;
+    });
+    setExecutionCounts(counts);
+    
+    // Fetch user's wallet balance (where funds come from)
+    if (userAddress) {
+      getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+    }
+
+    setPermissions(getPermissionsWithHealth());
+    checkEnvioHealth().then(ok => {
+      setEnvioStatus(ok ? "online" : "offline");
+      if (ok) getVaultDeposits(10).then(setIndexedDeposits);
+    });
+  }, [userAddress]);
+
+  // Auto-refresh deposits every 3 seconds when Envio is online
+  useEffect(() => {
+    if (envioStatus !== "online") return;
+    
+    const interval = setInterval(() => {
+      getVaultDeposits(10).then(setIndexedDeposits);
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [envioStatus]);
+
+  const handleExecute = async (agent: AgentSetup) => {
+    const privateKey = agent.agentPrivateKey as `0x${string}`;
     if (!privateKey) {
-      alert("Agent wallet not found");
+      addToast("error", "Agent private key not found");
       return;
     }
 
-    setIsExecuting(true);
+    setIsExecuting(agent.agentWallet);
     try {
-      const amount = "0.0001"; // Small amount for demo
-      const token = setup.token === "ETH" ? "ETH" : "USDC";
-      let result;
-
-      switch (setup.agentType) {
-        case "dca":
-          result = await executeDCA(privateKey, amount, token as "ETH" | "USDC");
-          break;
-        case "transfer":
-          const recipient = setup.recipient || "0x000000000000000000000000000000000000dEaD";
-          result = await executeAutoTransfer(privateKey, recipient as `0x${string}`, amount, token as "ETH" | "USDC");
-          break;
-        case "gas":
-          const walletToRefill = setup.recipient || "0x000000000000000000000000000000000000dEaD";
-          result = await executeGasRefill(privateKey, walletToRefill as `0x${string}`, amount);
-          break;
-        case "vault":
-          const vaultAddress = setup.recipient || "0x000000000000000000000000000000000000dEaD";
-          result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, amount);
-          break;
-        default:
-          result = await executeDCA(privateKey, amount, token as "ETH" | "USDC");
-      }
-
-      setLastExecution(result);
-      
+      const vaultAddress = agent.recipient || getVaultAddress(chainId) || "0x000000000000000000000000000000000000dEaD";
+      const result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, "0.0001");
+      setLastExecution({ ...result, agentWallet: agent.agentWallet });
       if (result.success) {
-        getAgentBalance(setup.agentWallet as `0x${string}`).then(setAgentBalance);
-        setStats(getDashboardStats());
+        addToast("success", `Deposited 0.0001 ETH to vault`);
+        // Refresh user balance (funds come from user's account)
+        if (userAddress) {
+          getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+        }
+        setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
+      } else {
+        addToast("error", result.error || "Execution failed");
       }
-    } catch (error) {
+    } catch (error: any) {
+      addToast("error", error.message || "Execution failed");
       console.error("Execution error:", error);
     } finally {
-      setIsExecuting(false);
+      setIsExecuting(null);
+    }
+  };
+
+  // Multi-chain execute - runs on both Sepolia and Base Sepolia
+  const handleMultiChainExecute = async (agent: AgentSetup) => {
+    const privateKey = agent.agentPrivateKey as `0x${string}`;
+    if (!privateKey) {
+      addToast("error", "Agent private key not found");
+      return;
+    }
+
+    setIsMultiExecuting(true);
+    addToast("info", "Executing on both chains...");
+
+    try {
+      // Execute on Sepolia
+      const sepoliaVault = getVaultAddress(CHAINS.sepolia.id);
+      if (sepoliaVault) {
+        const result1 = await executeVaultDeposit(privateKey, sepoliaVault, "0.0001");
+        if (result1.success) {
+          addToast("success", "✓ Sepolia deposit complete");
+        }
+      }
+
+      // Execute on Base Sepolia
+      const baseVault = getVaultAddress(CHAINS.baseSepolia.id);
+      if (baseVault) {
+        const result2 = await executeVaultDeposit(privateKey, baseVault, "0.0001");
+        if (result2.success) {
+          addToast("success", "✓ Base Sepolia deposit complete");
+        }
+      }
+
+      // Refresh deposits after both complete
+      setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
+    } catch (error: any) {
+      addToast("error", error.message || "Multi-chain execution failed");
+    } finally {
+      setIsMultiExecuting(false);
     }
   };
 
@@ -133,11 +205,11 @@ export function Monitor() {
     );
   }
 
-  if (permissions.length === 0) {
+  if (agents.length === 0) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center">
         <span className="text-5xl mb-4">📊</span>
-        <h1 className="text-2xl font-semibold mb-2">No Active Permissions</h1>
+        <h1 className="text-2xl font-semibold mb-2">No Agents</h1>
         <p className="text-[var(--text-muted)] text-sm mb-6">Setup an agent to get started</p>
         <button onClick={() => navigate("/setup")} className="px-6 py-3 bg-[var(--primary)] text-white font-medium rounded-xl">
           Setup Agent →
@@ -146,328 +218,283 @@ export function Monitor() {
     );
   }
 
-  const spendData = genSpendData(permissions);
-  const healthData = genHealthData(permissions);
-
   return (
     <div className="min-h-[80vh] px-4 py-6">
+      <Toast toasts={toasts} onRemove={removeToast} />
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold">Agent Dashboard</h1>
-            <p className="text-[var(--text-muted)] text-sm">Real-time monitoring & execution</p>
-          </div>
+          <h1 className="text-2xl font-semibold">Agent Dashboard</h1>
           <div className="flex items-center gap-3">
-            {/* Envio Status */}
-            <a
-              href={envioStatus === "online" ? "http://localhost:8080" : "https://docs.envio.dev"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:opacity-80 ${
-                envioStatus === "online" ? "bg-green-500/20 text-green-400" :
-                envioStatus === "offline" ? "bg-[var(--bg-dark)] text-[var(--text-muted)]" : "bg-yellow-500/20 text-yellow-400"
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs ${
+                envioStatus === "online" ? "bg-green-500/20 text-green-400" : "bg-[var(--bg-dark)] text-[var(--text-muted)]"
               }`}
-              title={envioStatus === "offline" ? "Run 'npx envio dev' in indexer folder" : ""}
             >
-              <span className={`w-2 h-2 rounded-full ${
-                envioStatus === "online" ? "bg-green-400" :
-                envioStatus === "offline" ? "bg-gray-500" : "bg-yellow-400"
-              }`}></span>
-              Envio {envioStatus === "offline" ? "not running" : envioStatus}
-            </a>
-            <button onClick={() => navigate("/setup")} className="px-4 py-2 bg-[var(--bg-card)] rounded-lg border border-[var(--border)] text-sm hover:border-[var(--primary)]">
+              <span className={`w-2 h-2 rounded-full ${envioStatus === "online" ? "bg-green-400" : "bg-gray-500"}`} />
+              Envio {envioStatus}
+            </div>
+            <button onClick={() => navigate("/setup")} className="px-3 py-1.5 bg-[var(--primary)] text-white text-xs rounded-lg">
               + New Agent
             </button>
           </div>
         </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <Stat icon="🤖" value={stats.activePermissions} label="Active Agents" />
-          <Stat icon="⚡" value={stats.totalExecutions} label="Transactions" />
-          <Stat icon="💰" value={`${stats.totalVolume.toFixed(4)}`} label="Total Spent (ETH)" />
-          <Stat icon="💚" value={`${Math.round((stats.healthyCount / Math.max(stats.activePermissions, 1)) * 100)}%`} label="System Health" color={stats.criticalCount > 0 ? "danger" : "primary"} />
-        </div>
-
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Spending Chart */}
-          <div className="lg:col-span-2 p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-            <h3 className="font-medium mb-4">Spending Activity (7 days)</h3>
-            <div className="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={spendData}>
-                  <defs>
-                    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="d" stroke="#444" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#444" fontSize={11} tickLine={false} axisLine={false} width={40} />
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid #333', fontSize: 12 }} />
-                  <Area type="monotone" dataKey="v" stroke={COLORS.primary} fill="url(#g)" name="ETH" />
-                </AreaChart>
-              </ResponsiveContainer>
+        {/* Stats Summary */}
+        {envioStatus === "online" && indexedDeposits.length > 0 && (
+          <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] text-center">
+              <p className="text-2xl font-bold text-[var(--primary)]">{totalDeposited.toFixed(4)}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Total ETH Deposited</p>
             </div>
-          </div>
-
-          {/* Health Pie */}
-          <div className="p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-            <h3 className="font-medium mb-4">Permission Health</h3>
-            <div className="h-36 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={healthData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="v" paddingAngle={3}>
-                    {healthData.map((e, i) => <Cell key={i} fill={e.c} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: '#111', border: '1px solid #333', fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] text-center">
+              <p className="text-2xl font-bold text-purple-400">{indexedDeposits.length}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Transactions Indexed</p>
             </div>
-            <div className="flex justify-center gap-3 text-xs mt-2">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Healthy</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> Warning</span>
+            <div className="p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] text-center">
+              <p className="text-2xl font-bold text-blue-400">{uniqueChains}</p>
+              <p className="text-[10px] text-[var(--text-muted)]">Chains Active</p>
             </div>
-          </div>
-        </div>
-
-        {/* Agent Card with Execute Button */}
-        {setup && (
-          <div className="p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] mb-6">
-            <div className="flex items-start gap-4 mb-4">
-              <span className="text-4xl">🤖</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="font-semibold text-lg">{setup.agentName}</h3>
-                  <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">● Active</span>
-                </div>
-                
-                {/* Agent Wallet & Balance */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[10px] text-[var(--text-muted)]">Agent Wallet (EOA)</p>
-                      <button
-                        onClick={() => setShowExportKey(!showExportKey)}
-                        className="text-[10px] text-[var(--primary)] hover:underline"
-                      >
-                        {showExportKey ? "Hide" : "Export"} Key
-                      </button>
-                    </div>
-                    <AddressDisplay address={setup.agentWallet} chainId={chainId} truncate={false} />
-                    {showExportKey && (
-                      <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
-                        <p className="text-[10px] text-yellow-400 mb-1">⚠️ Keep this secret!</p>
-                        <p className="font-mono text-[10px] break-all select-all">{exportPrivateKey()}</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3 bg-[var(--bg-dark)] rounded-lg">
-                    <p className="text-[10px] text-[var(--text-muted)]">Agent Balance</p>
-                    <p className="text-sm font-medium">{agentBalance.eth} ETH • {agentBalance.usdc} USDC</p>
-                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Fund this wallet to enable agent</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Execute Button */}
-              <div className="text-right">
-                <button
-                  onClick={handleExecute}
-                  disabled={isExecuting || parseFloat(agentBalance.eth) < 0.0001}
-                  className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-50"
-                >
-                  {isExecuting ? "Executing..." : "⚡ Test Execute"}
-                </button>
-                <p className="text-[10px] text-[var(--text-muted)] mt-1">
-                  Sends 0.0001 ETH to test
-                </p>
-              </div>
-            </div>
-
-            {/* Two Schedules Side by Side */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              {/* Execution Schedule */}
-              {setup.execution && (
-                <div className="p-4 bg-blue-500/5 border border-blue-500/30 rounded-lg">
-                  <h4 className="text-sm font-semibold text-blue-400 mb-3">🤖 Execution Schedule</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Frequency</span>
-                      <span>{setup.execution.frequency}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Per Execution</span>
-                      <span>{setup.execution.amount} {setup.token}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Total Cycles</span>
-                      <span className="text-blue-400 font-semibold">{setup.execution.cycles}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Total Spend</span>
-                      <span>{setup.execution.totalSpend?.toFixed(4)} {setup.token}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Ends</span>
-                      <span>{new Date(setup.execution.endDate).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Permission Grant */}
-              {setup.permission && (
-                <div className="p-4 bg-green-500/5 border border-green-500/30 rounded-lg">
-                  <h4 className="text-sm font-semibold text-green-400 mb-3">🔐 Permission Grant</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Period</span>
-                      <span>{setup.permission.frequency}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Max per Period</span>
-                      <span className="text-green-400">{setup.permission.amount} {setup.token}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Total Periods</span>
-                      <span className="text-green-400 font-semibold">{setup.permission.cycles}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Max Possible</span>
-                      <span>{setup.permission.maxSpend?.toFixed(4)} {setup.token}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--text-muted)]">Expires</span>
-                      <span>{new Date(setup.permission.endDate).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 px-2 py-1 rounded font-mono text-[10px] bg-green-500/20 text-green-400 inline-block">
-                    {setup.permission.type}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Last Execution Result */}
-            {lastExecution && (
-              <div className={`p-3 rounded-lg ${lastExecution.success ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
-                <p className={`text-sm ${lastExecution.success ? "text-green-400" : "text-red-400"}`}>
-                  {lastExecution.success ? "✅ Transaction successful!" : "❌ Transaction failed"}
-                </p>
-                {lastExecution.txHash && (
-                  <a 
-                    href={`https://sepolia.etherscan.io/tx/${lastExecution.txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-[var(--primary)] hover:underline"
-                  >
-                    View on Etherscan →
-                  </a>
-                )}
-                {lastExecution.error && (
-                  <p className="text-xs text-red-400 mt-1">{lastExecution.error}</p>
-                )}
-              </div>
-            )}
           </div>
         )}
 
-        {/* Permissions Table */}
-        <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] overflow-hidden">
-          <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
-            <h3 className="font-medium">Active Permissions</h3>
-            <span className="text-sm text-[var(--text-muted)]">{permissions.length} total</span>
+        {/* Two Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+
+        {/* User's Wallet Balance */}
+        <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💰</span>
+            <span className="text-sm font-medium">Your Wallet</span>
+            <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Funds Source</span>
           </div>
-          <div className="divide-y divide-[var(--border)]">
-            {permissions.map((p, i) => (
-              <PermRow key={p.id} p={p} i={i} onRevoke={handleRevoke} />
-            ))}
+          <div className="flex items-center gap-4">
+            <div>
+              <span className="text-[10px] text-[var(--text-muted)]">ETH Balance</span>
+              <p className="text-lg font-semibold">{userBalance.eth} ETH</p>
+            </div>
+            <div>
+              <span className="text-[10px] text-[var(--text-muted)]">USDC Balance</span>
+              <p className="text-lg font-semibold">{userBalance.usdc} USDC</p>
+            </div>
           </div>
+          <p className="text-[10px] text-[var(--text-muted)] mt-2">
+            Agents execute via ERC-7715 permissions. Funds come from your wallet.
+          </p>
+        </div>
+
+        {/* All Agents */}
+        <div className="space-y-4">
+          {agents.map((agent) => {
+            const isThisExecuting = isExecuting === agent.agentWallet;
+            const thisExecution = lastExecution?.agentWallet === agent.agentWallet ? lastExecution : null;
+            const execCount = executionCounts[agent.agentWallet] || 0;
+            // Calculate permission expiry
+            const permEndDate = agent.permission?.endDate ? new Date(agent.permission.endDate) : null;
+            const daysLeft = permEndDate ? Math.ceil((permEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+            const agentIcon = AGENT_ICONS[agent.agentType] || "🤖";
+            
+            // Calculate next execution time based on frequency
+            const freqSeconds: Record<string, number> = { hourly: 3600, daily: 86400, weekly: 604800 };
+            const freq = agent.permission?.frequency || "daily";
+            const periodSec = freqSeconds[freq] || 86400;
+            // For demo, show countdown from now (in production, track last execution)
+            const nextExecIn = periodSec - (Math.floor(Date.now() / 1000) % periodSec);
+            const nextExecHours = Math.floor(nextExecIn / 3600);
+            const nextExecMins = Math.floor((nextExecIn % 3600) / 60);
+
+            return (
+              <div key={agent.agentWallet} className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{agentIcon}</span>
+                    <div>
+                      <h3 className="font-semibold">{agent.agentName}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded">Active</span>
+                        {execCount > 0 && (
+                          <span className="text-[10px] text-[var(--text-muted)]">{execCount} runs</span>
+                        )}
+                        {daysLeft !== null && daysLeft <= 7 && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${daysLeft <= 2 ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"}`}>
+                            {daysLeft <= 0 ? "Expired" : `${daysLeft}d left`}
+                          </span>
+                        )}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                          ⏱ {nextExecHours}h {nextExecMins}m
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDeleteAgent(agent.agentWallet)}
+                      className="px-2 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg text-xs"
+                      title="Delete agent"
+                    >
+                      🗑️
+                    </button>
+                    {agent.agentType === "vault" && (
+                      <button
+                        onClick={() => handleMultiChainExecute(agent)}
+                        disabled={isMultiExecuting || parseFloat(userBalance.eth) < 0.0002}
+                        className="px-2 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg disabled:opacity-50 hover:bg-purple-500/30"
+                        title="Execute on both Sepolia & Base"
+                      >
+                        {isMultiExecuting ? "⏳" : "🌐 Multi"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleExecute(agent)}
+                      disabled={isThisExecuting || parseFloat(userBalance.eth) < 0.0001}
+                      className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {isThisExecuting ? (
+                        <><span className="animate-spin">⏳</span> Running...</>
+                      ) : (
+                        <>⚡ Execute</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2 bg-[var(--bg-dark)] rounded-lg mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-[var(--text-muted)]">Agent Wallet (Signer)</span>
+                    <button 
+                      onClick={() => setShowExportKey(showExportKey === agent.agentWallet ? null : agent.agentWallet)} 
+                      className="text-[10px] text-[var(--primary)]"
+                    >
+                      {showExportKey === agent.agentWallet ? "Hide" : "Key"}
+                    </button>
+                  </div>
+                  <AddressDisplay address={agent.agentWallet} chainId={chainId} truncate />
+                  {showExportKey === agent.agentWallet && agent.agentPrivateKey && (
+                    <p className="mt-1 font-mono text-[9px] text-yellow-400 break-all">{agent.agentPrivateKey}</p>
+                  )}
+                </div>
+
+                {/* Target/Recipient - show for gas refiller, vault, transfer */}
+                {agent.recipient && (
+                  <div className="p-2 bg-[var(--bg-dark)] rounded-lg mb-3">
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {agent.agentType === "gas" ? "Refills →" : agent.agentType === "vault" ? "Vault →" : "Sends to →"}
+                    </span>
+                    <AddressDisplay address={agent.recipient} chainId={chainId} truncate />
+                  </div>
+                )}
+
+                {/* Permission */}
+                <div className="p-2 bg-green-500/5 border border-green-500/30 rounded-lg text-xs">
+                  <span className="text-green-400">🔐 {agent.permission?.amount} {agent.token}/{agent.permission?.frequency}</span>
+                  <span className="text-[var(--text-muted)] ml-2">• {agent.permission?.type}</span>
+                </div>
+
+                {/* Execution result */}
+                {thisExecution && (
+                  <div className={`mt-2 p-2 rounded text-xs ${thisExecution.success ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                    {thisExecution.success ? (
+                      <>✅ Success</>
+                    ) : (
+                      <>❌ {thisExecution.error || "Failed"}</>
+                    )}
+                    {thisExecution.txHash && (
+                      <a href={`https://sepolia.etherscan.io/tx/${thisExecution.txHash}`} target="_blank" className="ml-2 text-[var(--primary)]">View →</a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Active Permissions */}
+        {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length > 0 && (
+          <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+            <div className="p-4 border-b border-[var(--border)]">
+              <h3 className="font-medium">Active Permissions ({permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length})</h3>
+            </div>
+            {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).map((p) => {
+              // Find original index for revoke
+              const originalIndex = permissions.findIndex(perm => perm.id === p.id);
+              return (
+                <div key={p.id} className="p-3 border-b border-[var(--border)] last:border-0 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</p>
+                    <p className="text-xs text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</p>
+                  </div>
+                  <button onClick={() => { revokePermission(originalIndex); setPermissions(getPermissionsWithHealth()); }} className="px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded">
+                    Revoke
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+          </div>
+
+          {/* Right Column - Live Activity Feed */}
+          {envioStatus === "online" && (
+            <div className="lg:col-span-1">
+              <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] lg:sticky lg:top-6">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    <h3 className="font-medium">Live Activity</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">HyperSync</span>
+                    <span className="text-[10px] text-[var(--text-muted)]">Auto 3s</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
+                      {indexedDeposits.length}
+                    </span>
+                  </div>
+                </div>
+                {indexedDeposits.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <p className="text-[var(--text-muted)] text-sm">Watching...</p>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Execute to see HyperSync</p>
+                  </div>
+                ) : (
+                  <div className="max-h-[60vh] overflow-y-auto">
+                    {indexedDeposits.map((d) => {
+                      const timestamp = d.timestamp ? new Date(d.timestamp).getTime() : Date.now();
+                      const secondsAgo = Math.floor((Date.now() - timestamp) / 1000);
+                      const timeAgo = secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                      
+                      return (
+                        <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.chainId === 11155111 ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
+                              {d.chainId === 11155111 ? "Sepolia" : "Base"}
+                            </span>
+                            <span className="text-[10px] text-[var(--text-muted)]">{timeAgo}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{(Number(d.amount) / 1e18).toFixed(4)} ETH</span>
+                            <a
+                              href={`${d.chainId === 11155111 ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
+                              target="_blank"
+                              className="text-[10px] text-[var(--primary)] hover:underline"
+                            >
+                              Tx →
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-}
-
-function Stat({ icon, value, label, color }: { icon: string; value: string | number; label: string; color?: string }) {
-  return (
-    <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
-        <div>
-          <p className={`text-xl font-bold ${color === "danger" ? "text-red-400" : ""}`}>{value}</p>
-          <p className="text-xs text-[var(--text-muted)]">{label}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PermRow({ p, i, onRevoke }: { p: PermissionWithHealth; i: number; onRevoke: (i: number) => void }) {
-  const period = p.config.periodDuration === 3600 ? "hr" : p.config.periodDuration === 86400 ? "day" : "wk";
-  const pct = Math.min((p.totalExecuted / parseFloat(p.config.amountPerPeriod)) * 100, 100);
-  
-  return (
-    <div className="p-4 flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-        p.healthScore >= 70 ? "bg-green-500/20 text-green-400" :
-        p.healthScore >= 40 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
-      }`}>
-        {p.healthScore}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-medium">{p.config.amountPerPeriod} {p.config.token}/{period}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <div className="flex-1 h-1.5 bg-[var(--bg-dark)] rounded-full overflow-hidden max-w-[200px]">
-            <div className={`h-full ${pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-xs text-[var(--text-muted)]">{p.executionCount} txns • {p.totalExecuted.toFixed(4)} spent</span>
-        </div>
-      </div>
-      <div className="text-right">
-        <span className={`text-xs px-2 py-1 rounded ${
-          p.status === "healthy" ? "bg-green-500/20 text-green-400" :
-          p.status === "warning" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
-        }`}>{p.status}</span>
-        <p className="text-xs text-[var(--text-muted)] mt-1">{formatTimeRemaining(p.timeRemaining)} left</p>
-      </div>
-      {p.status !== "revoked" && p.status !== "expired" && (
-        <button onClick={() => onRevoke(i)} className="px-3 py-1.5 text-xs bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">
-          Revoke
-        </button>
-      )}
-    </div>
-  );
-}
-
-function genSpendData(_perms: PermissionWithHealth[]) {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  // Use real execution data from localStorage
-  const executions = JSON.parse(localStorage.getItem("leash_executions") || "[]");
-  
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(Date.now() - (6 - i) * 86400000);
-    const dayStart = new Date(d.setHours(0, 0, 0, 0)).getTime();
-    const dayEnd = dayStart + 86400000;
-    
-    // Sum executions for this day
-    const dayExecs = executions.filter((e: any) => e.timestamp >= dayStart && e.timestamp < dayEnd);
-    const v = dayExecs.reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
-    
-    return { d: days[d.getDay()], v: parseFloat(v.toFixed(4)) };
-  });
-}
-
-function genHealthData(perms: PermissionWithHealth[]) {
-  const h = perms.filter(p => p.status === "healthy").length || 1;
-  const w = perms.filter(p => p.status === "warning").length;
-  const c = perms.filter(p => p.status === "critical").length;
-  return [
-    { name: "Healthy", v: h, c: COLORS.primary },
-    { name: "Warning", v: w, c: COLORS.warning },
-    { name: "Critical", v: c, c: COLORS.danger },
-  ].filter(d => d.v > 0);
 }

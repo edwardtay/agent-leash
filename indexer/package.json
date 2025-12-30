@@ -1,0 +1,14 @@
+{
+  "name": "agentleash-indexer",
+  "version": "1.0.0",
+  "scripts": {
+    "codegen": "envio codegen",
+    "dev": "envio dev",
+    "start": "envio start",
+    "stop": "envio stop"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "envio": "^2.32.3"
+  }
+}

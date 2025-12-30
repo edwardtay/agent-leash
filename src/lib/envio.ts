@@ -192,3 +192,64 @@ export async function checkEnvioHealth(): Promise<boolean> {
     return false;
   }
 }
+
+export interface VaultDeposit {
+  id: string;
+  user: string;
+  amount: string;
+  txHash: string;
+  chainId: number;
+  blockNumber: number;
+  timestamp: string;
+}
+
+/**
+ * Get vault deposits from Envio indexer (multi-chain)
+ */
+export async function getVaultDeposits(limit = 20): Promise<VaultDeposit[]> {
+  const result = await query<{ VaultDeposit: VaultDeposit[] }>(`
+    query {
+      VaultDeposit(
+        order_by: { blockNumber: desc }
+        limit: ${limit}
+      ) {
+        id
+        user
+        amount
+        txHash
+        chainId
+        blockNumber
+        timestamp
+      }
+    }
+  `);
+
+  return result?.VaultDeposit || [];
+}
+
+/**
+ * Get daily stats from Envio indexer
+ */
+export async function getDailyStatsFromEnvio() {
+  const result = await query<{ DailyStats: Array<{
+    id: string;
+    date: string;
+    chainId: number;
+    totalDeposits: number;
+    totalWithdrawals: number;
+    totalVolume: string;
+  }> }>(`
+    query {
+      DailyStats(order_by: { date: desc }, limit: 14) {
+        id
+        date
+        chainId
+        totalDeposits
+        totalWithdrawals
+        totalVolume
+      }
+    }
+  `);
+
+  return result?.DailyStats || [];
+}
