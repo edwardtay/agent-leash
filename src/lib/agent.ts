@@ -115,7 +115,7 @@ export async function executeVaultDeposit(
       };
     }
 
-    const permissionsContext = permissionResponse.context as Hex;
+    const permissionsContext = permissionResponse.permissionsContext as Hex;
     const delegationManager = permissionResponse.signerMeta?.delegationManager as Hex;
 
     if (!permissionsContext || !delegationManager) {
@@ -180,7 +180,7 @@ export async function executeVaultDeposit(
     console.error("Vault deposit with permission error:", error);
     
     // If permission execution fails, try direct execution as fallback
-    if (error.message?.includes("delegation") || error.message?.includes("permission")) {
+    if (error.message?.includes("delegation") || error.message?.includes("permission") || error.message?.includes("revert")) {
       console.log("Permission execution failed, trying direct execution");
       return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount);
     }
