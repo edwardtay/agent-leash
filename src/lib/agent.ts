@@ -1,10 +1,12 @@
 /**
  * Agent Execution Service
- * Executes transactions for different agent types on Sepolia
+ * Executes transactions for different agent types on Sepolia/Base Sepolia
  */
 
 import { createPublicClient, http, parseEther, encodeFunctionData } from "viem";
 import { sepolia } from "viem/chains";
+
+const SEPOLIA_RPC = import.meta.env.VITE_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
 
 // Simple vault ABI for deposits
 const VAULT_ABI = [
@@ -59,7 +61,6 @@ export async function executeDCA(
   amount: string,
   token: "ETH" | "USDC"
 ): Promise<ExecutionResult> {
-  // For demo: DCA just sends to a "swap" address (simulating DEX)
   const swapAddress = "0x000000000000000000000000000000000000dEaD" as `0x${string}`;
   return executeTransfer(agentPrivateKey, swapAddress, amount, token, "dca");
 }
@@ -106,15 +107,14 @@ export async function executeVaultDeposit(
     const walletClient = createWalletClient({
       account,
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
-    // Call vault deposit function with ETH value
     const txHash = await walletClient.sendTransaction({
       to: vaultAddress,
       value: parseEther(amount),
@@ -126,7 +126,6 @@ export async function executeVaultDeposit(
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Store execution
     storeExecution({
       hash: txHash,
       timestamp,
@@ -177,12 +176,12 @@ async function executeTransfer(
     const walletClient = createWalletClient({
       account,
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
     let txHash: `0x${string}`;
@@ -206,7 +205,6 @@ async function executeTransfer(
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Store execution
     storeExecution({
       hash: txHash,
       timestamp,
@@ -236,9 +234,6 @@ async function executeTransfer(
   }
 }
 
-/**
- * Store execution in localStorage
- */
 function storeExecution(execution: {
   hash: string;
   timestamp: number;
@@ -253,14 +248,11 @@ function storeExecution(execution: {
   localStorage.setItem("leash_executions", JSON.stringify(executions));
 }
 
-/**
- * Get agent wallet balance
- */
 export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: string; usdc: string }> {
   try {
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
     const ethBalance = await publicClient.getBalance({ address });
@@ -282,9 +274,6 @@ export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: st
   }
 }
 
-/**
- * Check if wallet needs gas refill
- */
 export async function checkNeedsRefill(
   address: `0x${string}`,
   threshold: string
@@ -292,7 +281,7 @@ export async function checkNeedsRefill(
   try {
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http(),
+      transport: http(SEPOLIA_RPC),
     });
 
     const balance = await publicClient.getBalance({ address });
