@@ -16,8 +16,8 @@ export function Header() {
     <header className="border-b border-[var(--border)] bg-[var(--bg-card)]">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-14">
-          <Link to="/" className="flex items-center gap-1.5">
-            <span className="text-lg">🔗</span>
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="AgentLeash" className="h-8 w-8 object-contain" />
             <span className="text-sm font-semibold text-[var(--primary)] hidden sm:inline">AgentLeash</span>
           </Link>
 

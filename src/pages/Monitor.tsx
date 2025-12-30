@@ -225,17 +225,13 @@ export function Monitor() {
         {/* Agent Card with Execute Button */}
         {setup && (
           <div className="p-5 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] mb-6">
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 mb-4">
               <span className="text-4xl">🤖</span>
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-2">
                   <h3 className="font-semibold text-lg">{setup.agentName}</h3>
                   <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">● Active</span>
                 </div>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
-                  {setup.spendLimit} {setup.token || "ETH"} / {setup.permissionType === "stream" ? "sec" : setup.frequency}
-                  {setup.permType && <span className="ml-2 font-mono text-[10px] opacity-60">({setup.permType})</span>}
-                </p>
                 
                 {/* Agent Wallet & Balance */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -265,9 +261,73 @@ export function Monitor() {
               </div>
             </div>
 
+            {/* Two Schedules Side by Side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              {/* Execution Schedule */}
+              {setup.execution && (
+                <div className="p-4 bg-blue-500/5 border border-blue-500/30 rounded-lg">
+                  <h4 className="text-sm font-semibold text-blue-400 mb-3">🤖 Execution Schedule</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Frequency</span>
+                      <span>{setup.execution.frequency}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Per Execution</span>
+                      <span>{setup.execution.amount} {setup.token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Total Cycles</span>
+                      <span className="text-blue-400 font-semibold">{setup.execution.cycles}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Total Spend</span>
+                      <span>{setup.execution.totalSpend?.toFixed(4)} {setup.token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Ends</span>
+                      <span>{new Date(setup.execution.endDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Permission Grant */}
+              {setup.permission && (
+                <div className="p-4 bg-green-500/5 border border-green-500/30 rounded-lg">
+                  <h4 className="text-sm font-semibold text-green-400 mb-3">🔐 Permission Grant</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Period</span>
+                      <span>{setup.permission.frequency}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Max per Period</span>
+                      <span className="text-green-400">{setup.permission.amount} {setup.token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Total Periods</span>
+                      <span className="text-green-400 font-semibold">{setup.permission.cycles}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Max Possible</span>
+                      <span>{setup.permission.maxSpend?.toFixed(4)} {setup.token}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Expires</span>
+                      <span>{new Date(setup.permission.endDate).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 px-2 py-1 rounded font-mono text-[10px] bg-green-500/20 text-green-400 inline-block">
+                    {setup.permission.type}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Last Execution Result */}
             {lastExecution && (
-              <div className={`mt-4 p-3 rounded-lg ${lastExecution.success ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
+              <div className={`p-3 rounded-lg ${lastExecution.success ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
                 <p className={`text-sm ${lastExecution.success ? "text-green-400" : "text-red-400"}`}>
                   {lastExecution.success ? "✅ Transaction successful!" : "❌ Transaction failed"}
                 </p>

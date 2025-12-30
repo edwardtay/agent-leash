@@ -11,6 +11,12 @@ const TOKENS = {
   USDC: { symbol: "USDC", name: "USD Coin", isNative: false },
 };
 
+const FREQ_OPTIONS = {
+  hourly: { label: "Hourly", seconds: 3600 },
+  daily: { label: "Daily", seconds: 86400 },
+  weekly: { label: "Weekly", seconds: 604800 },
+};
+
 const AGENT_CONFIG: Record<AgentType, {
   name: string;
   icon: string;
@@ -68,9 +74,17 @@ export function SetupAgent() {
 
   const [agentName, setAgentName] = useState("");
   const [selectedToken, setSelectedToken] = useState<keyof typeof TOKENS>("ETH");
-  const [amount, setAmount] = useState("0.001");
-  const [frequency, setFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
   const [recipient, setRecipient] = useState("");
+  
+  // Agent Execution Schedule
+  const [execFrequency, setExecFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
+  const [execAmount, setExecAmount] = useState("0.001");
+  const [execDuration, setExecDuration] = useState(7); // days
+  
+  // Permission/Funds Grant (can be different from execution)
+  const [permFrequency, setPermFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
+  const [permAmount, setPermAmount] = useState("0.01");
+  const [permDuration, setPermDuration] = useState(30); // days
 
   useEffect(() => {
     if (config) {
@@ -79,8 +93,21 @@ export function SetupAgent() {
     }
   }, [agentType]);
 
-  // Determine permission type based on token
+  // Calculate execution cycles
+  const execCycles = Math.floor(execDuration * 86400 / FREQ_OPTIONS[execFrequency].seconds);
+  const execTotalSpend = parseFloat(execAmount) * execCycles;
+  const execEndDate = new Date(Date.now() + execDuration * 86400000);
+
+  // Calculate permission cycles
+  const permCycles = Math.floor(permDuration * 86400 / FREQ_OPTIONS[permFrequency].seconds);
+  const permMaxSpend = parseFloat(permAmount) * permCycles;
+  const permEndDate = new Date(Date.now() + permDuration * 86400000);
+
+  // Permission type based on token
   const permType = TOKENS[selectedToken].isNative ? "native-token-periodic" : "erc20-token-periodic";
+
+  // Validation: permission should cover execution needs
+  const isPermissionSufficient = permMaxSpend >= execTotalSpend && permDuration >= execDuration;
 
   if (!config) {
     return (
@@ -115,11 +142,36 @@ export function SetupAgent() {
       agentName,
       agentWallet: sessionAccount.address,
       token: selectedToken,
+      recipient: recipient || null,
+      // Execution schedule
+      execution: {
+        frequency: execFrequency,
+        amount: execAmount,
+        duration: execDuration,
+        cycles: execCycles,
+        totalSpend: execTotalSpend,
+        endDate: execEndDate.toISOString(),
+      },
+      // Permission grant
+      permission: {
+        frequency: permFrequency,
+        amount: permAmount,
+        duration: permDuration,
+        cycles: permCycles,
+        maxSpend: permMaxSpend,
+        endDate: permEndDate.toISOString(),
+        type: permType,
+      },
+      // Legacy fields for compatibility
       permissionType: "periodic",
       permType,
-      spendLimit: amount,
-      frequency,
-      recipient: recipient || null,
+      spendLimit: permAmount,
+      frequency: permFrequency,
+      duration: permDuration,
+      totalCycles: permCycles,
+      maxSpend: permMaxSpend,
+      startDate: new Date().toISOString(),
+      endDate: permEndDate.toISOString(),
       createdAt: Date.now(),
     }));
     navigate("/grant");
@@ -127,7 +179,7 @@ export function SetupAgent() {
 
   return (
     <div className="min-h-[80vh] px-4 py-6">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <Link to="/setup" className="text-[var(--text-muted)] hover:text-white text-xl">←</Link>
@@ -138,141 +190,204 @@ export function SetupAgent() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Configuration */}
-          <div className="space-y-4">
-            {/* Agent Name */}
+        {/* Basic Config */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+            <label className="block text-xs text-[var(--text-muted)] mb-2">Agent Name</label>
+            <input
+              type="text"
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+              className="w-full px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg focus:border-[var(--primary)] outline-none"
+            />
+          </div>
+          <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+            <label className="block text-xs text-[var(--text-muted)] mb-2">Token</label>
+            <div className="flex gap-2">
+              {config.tokens.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSelectedToken(t)}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium ${
+                    selectedToken === t ? "bg-[var(--primary)] text-white" : "bg-[var(--bg-dark)] text-[var(--text-muted)]"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          {config.needsRecipient && (
             <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">Agent Name</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-2">{config.recipientLabel}</label>
               <input
                 type="text"
-                value={agentName}
-                onChange={(e) => setAgentName(e.target.value)}
-                className="w-full px-3 py-2.5 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg focus:border-[var(--primary)] outline-none"
+                value={recipient}
+                onChange={(e) => setRecipient(e.target.value)}
+                placeholder={config.recipientPlaceholder}
+                className="w-full px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono text-xs"
               />
             </div>
+          )}
+        </div>
 
-            {/* Token Selection */}
-            <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">Token</label>
-              <div className="grid grid-cols-2 gap-2">
-                {config.tokens.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setSelectedToken(t)}
-                    className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      selectedToken === t
-                        ? "bg-[var(--primary)] text-white"
-                        : "bg-[var(--bg-dark)] text-[var(--text-muted)] hover:text-white"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+        {/* Two Schedules Side by Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Agent Execution Schedule */}
+          <div className="p-5 bg-blue-500/5 border border-blue-500/30 rounded-xl">
+            <h3 className="font-semibold text-blue-400 mb-4">🤖 Agent Execution Schedule</h3>
+            <p className="text-xs text-[var(--text-muted)] mb-4">When and how much the agent executes each time</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-2">Execute Every</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(FREQ_OPTIONS) as Array<keyof typeof FREQ_OPTIONS>).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setExecFrequency(f)}
+                      className={`px-3 py-2 rounded-lg text-sm ${
+                        execFrequency === f ? "bg-blue-500 text-white" : "bg-[var(--bg-dark)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      {FREQ_OPTIONS[f].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-2">Amount per Execution</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={execAmount}
+                    onChange={(e) => setExecAmount(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
+                  />
+                  <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">{selectedToken}</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-xs text-[var(--text-muted)]">Run For</label>
+                  <span className="text-sm">{execDuration} days</span>
+                </div>
+                <input type="range" min="1" max="90" value={execDuration} onChange={(e) => setExecDuration(parseInt(e.target.value))} className="w-full" />
+              </div>
+
+              {/* Execution Summary */}
+              <div className="p-3 bg-blue-500/10 rounded-lg text-sm">
+                <div className="flex justify-between mb-1">
+                  <span className="text-[var(--text-muted)]">Total Executions</span>
+                  <span className="font-semibold text-blue-400">{execCycles}</span>
+                </div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-[var(--text-muted)]">Total Spend</span>
+                  <span className="font-semibold">{execTotalSpend.toFixed(4)} {selectedToken}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-muted)]">Ends</span>
+                  <span>{execEndDate.toLocaleDateString()}</span>
+                </div>
               </div>
             </div>
-
-            {/* Amount */}
-            <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">Amount per period</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1 px-3 py-2.5 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
-                />
-                <span className="px-4 py-2.5 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">
-                  {selectedToken}
-                </span>
-              </div>
-            </div>
-
-            {/* Frequency */}
-            <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">Frequency</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(["hourly", "daily", "weekly"] as const).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFrequency(f)}
-                    className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                      frequency === f
-                        ? "bg-[var(--primary)] text-white"
-                        : "bg-[var(--bg-dark)] text-[var(--text-muted)] hover:text-white"
-                    }`}
-                  >
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Recipient (if needed) */}
-            {config.needsRecipient && (
-              <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-                <label className="block text-xs text-[var(--text-muted)] mb-2">{config.recipientLabel}</label>
-                <input
-                  type="text"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder={config.recipientPlaceholder}
-                  className="w-full px-3 py-2.5 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono text-sm focus:border-[var(--primary)] outline-none"
-                />
-              </div>
-            )}
           </div>
 
-          {/* Right Column - Summary */}
-          <div className="space-y-4">
-            {/* Permission Type */}
-            <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-              <label className="block text-xs text-[var(--text-muted)] mb-2">ERC-7715 Permission Type</label>
-              <div className="px-4 py-3 rounded-lg font-mono text-sm bg-green-500/20 text-green-400">
+          {/* Permission/Funds Grant */}
+          <div className="p-5 bg-green-500/5 border border-green-500/30 rounded-xl">
+            <h3 className="font-semibold text-green-400 mb-4">🔐 Permission Grant (ERC-7715)</h3>
+            <p className="text-xs text-[var(--text-muted)] mb-4">How much the agent is allowed to spend per period</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-2">Allowance Period</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(FREQ_OPTIONS) as Array<keyof typeof FREQ_OPTIONS>).map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setPermFrequency(f)}
+                      className={`px-3 py-2 rounded-lg text-sm ${
+                        permFrequency === f ? "bg-green-500 text-white" : "bg-[var(--bg-dark)] text-[var(--text-muted)]"
+                      }`}
+                    >
+                      {FREQ_OPTIONS[f].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-2">Max per Period</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={permAmount}
+                    onChange={(e) => setPermAmount(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
+                  />
+                  <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">{selectedToken}</span>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between mb-2">
+                  <label className="text-xs text-[var(--text-muted)]">Permission Valid For</label>
+                  <span className="text-sm">{permDuration} days</span>
+                </div>
+                <input type="range" min="1" max="365" value={permDuration} onChange={(e) => setPermDuration(parseInt(e.target.value))} className="w-full" />
+              </div>
+
+              {/* Permission Summary */}
+              <div className="p-3 bg-green-500/10 rounded-lg text-sm">
+                <div className="flex justify-between mb-1">
+                  <span className="text-[var(--text-muted)]">Total Periods</span>
+                  <span className="font-semibold text-green-400">{permCycles}</span>
+                </div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-[var(--text-muted)]">Max Possible Spend</span>
+                  <span className="font-semibold">{permMaxSpend.toFixed(4)} {selectedToken}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-muted)]">Expires</span>
+                  <span>{permEndDate.toLocaleDateString()}</span>
+                </div>
+              </div>
+
+              {/* Permission Type */}
+              <div className="px-3 py-2 rounded-lg font-mono text-xs bg-green-500/20 text-green-400">
                 {permType}
               </div>
-              <p className="text-xs text-[var(--text-muted)] mt-2">
-                Allowance resets at the start of each period
-              </p>
             </div>
-
-            {/* Agent Wallet */}
-            {isReady && sessionAccount && (
-              <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-                <label className="block text-xs text-[var(--text-muted)] mb-2">Agent Wallet (EOA)</label>
-                <p className="font-mono text-sm break-all bg-[var(--bg-dark)] p-3 rounded-lg">
-                  {sessionAccount.address}
-                </p>
-                <p className="text-xs text-[var(--text-muted)] mt-2">
-                  Fund this wallet with Sepolia ETH to execute transactions
-                </p>
-              </div>
-            )}
-
-            {/* Summary */}
-            <div className="p-4 bg-[var(--primary)]/10 border border-[var(--primary)]/30 rounded-xl">
-              <h4 className="font-medium mb-2">Permission Summary</h4>
-              <p className="text-sm">
-                Agent <span className="font-semibold">{agentName}</span> can spend up to{" "}
-                <span className="font-semibold text-[var(--primary)]">{amount} {selectedToken}</span>
-                {" "}per {frequency.replace("ly", "")}
-              </p>
-              {config.needsRecipient && recipient && (
-                <p className="text-xs text-[var(--text-muted)] mt-2">
-                  Sending to: {recipient.slice(0, 10)}...{recipient.slice(-8)}
-                </p>
-              )}
-            </div>
-
-            {/* Continue Button */}
-            <button
-              onClick={handleContinue}
-              disabled={!isReady || !agentName || (config.needsRecipient && !recipient)}
-              className="w-full py-3.5 bg-[var(--primary)] text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50"
-            >
-              Continue to Grant Permission →
-            </button>
           </div>
+        </div>
+
+        {/* Validation Warning */}
+        {!isPermissionSufficient && (
+          <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+            <p className="text-sm text-yellow-400">
+              ⚠️ Permission may not cover all executions. Execution needs {execTotalSpend.toFixed(4)} {selectedToken} over {execDuration} days, 
+              but permission only allows {permMaxSpend.toFixed(4)} {selectedToken} over {permDuration} days.
+            </p>
+          </div>
+        )}
+
+        {/* Agent Wallet & Continue */}
+        <div className="flex items-center gap-4">
+          {isReady && sessionAccount && (
+            <div className="flex-1 p-3 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
+              <span className="text-xs text-[var(--text-muted)]">Agent Wallet: </span>
+              <span className="font-mono text-xs">{sessionAccount.address}</span>
+            </div>
+          )}
+          <button
+            onClick={handleContinue}
+            disabled={!isReady || !agentName || (config.needsRecipient && !recipient)}
+            className="px-8 py-3 bg-[var(--primary)] text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50"
+          >
+            Continue →
+          </button>
         </div>
       </div>
     </div>

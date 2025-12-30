@@ -10,7 +10,7 @@ export function Home() {
       <div className="max-w-5xl mx-auto">
         {/* Hero */}
         <div className="text-center mb-12">
-          <span className="text-6xl mb-4 block">🤖</span>
+          <img src="/logo.png" alt="AgentLeash" className="h-20 w-20 mx-auto mb-4 object-contain" />
           <h1 className="text-4xl font-bold mb-3">
             <span className="text-[var(--primary)]">Agent</span>Leash
           </h1>
