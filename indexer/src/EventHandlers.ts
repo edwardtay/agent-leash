@@ -1,4 +1,4 @@
-import { SimpleVault } from "generated";
+const { SimpleVault } = require("generated");
 
 // Handle Deposit events
 SimpleVault.Deposit.handler(async ({ event, context }) => {
