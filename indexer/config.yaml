@@ -11,12 +11,12 @@ contracts:
       - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
 networks:
   - id: 11155111 # Sepolia
-    start_block: 7870000
+    start_block: 9940000
     contracts:
       - name: SimpleVault
         address: "0x9acec7011519F89C59d9A595f9829bBb79Ed0d4b"
   - id: 84532 # Base Sepolia
-    start_block: 21000000
+    start_block: 22000000
     contracts:
       - name: SimpleVault
         address: "0x93fc90a3Fb7d8c15bbaF50bFCc612B26CA8E68c8"
