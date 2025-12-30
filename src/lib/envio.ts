@@ -3,7 +3,7 @@
  * Queries indexed blockchain data for permission analytics
  */
 
-const ENVIO_ENDPOINT = import.meta.env.VITE_ENVIO_ENDPOINT || "https://indexer.dev.hyperindex.xyz/bce86b3/v1/graphql";
+const ENVIO_ENDPOINT = import.meta.env.VITE_ENVIO_ENDPOINT || "https://indexer.dev.hyperindex.xyz/120211b/v1/graphql";
 
 interface GraphQLResponse<T> {
   data?: T;
