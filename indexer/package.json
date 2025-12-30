@@ -7,8 +7,8 @@
     "start": "envio start",
     "stop": "envio stop"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "envio": "^2.32.3"
-  }
+  "dependencies": {
+    "envio": "latest"
+  },
+  "devDependencies": {}
 }
