@@ -160,16 +160,22 @@ export function Monitor() {
           </div>
           <div className="flex items-center gap-3">
             {/* Envio Status */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs ${
-              envioStatus === "online" ? "bg-green-500/20 text-green-400" :
-              envioStatus === "offline" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"
-            }`}>
+            <a
+              href={envioStatus === "online" ? "http://localhost:8080" : "https://docs.envio.dev"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:opacity-80 ${
+                envioStatus === "online" ? "bg-green-500/20 text-green-400" :
+                envioStatus === "offline" ? "bg-[var(--bg-dark)] text-[var(--text-muted)]" : "bg-yellow-500/20 text-yellow-400"
+              }`}
+              title={envioStatus === "offline" ? "Run 'npx envio dev' in indexer folder" : ""}
+            >
               <span className={`w-2 h-2 rounded-full ${
                 envioStatus === "online" ? "bg-green-400" :
-                envioStatus === "offline" ? "bg-red-400" : "bg-yellow-400"
+                envioStatus === "offline" ? "bg-gray-500" : "bg-yellow-400"
               }`}></span>
-              Envio {envioStatus}
-            </div>
+              Envio {envioStatus === "offline" ? "not running" : envioStatus}
+            </a>
             <button onClick={() => navigate("/setup")} className="px-4 py-2 bg-[var(--bg-card)] rounded-lg border border-[var(--border)] text-sm hover:border-[var(--primary)]">
               + New Agent
             </button>

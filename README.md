@@ -44,13 +44,20 @@ npm run dev
 Create `.env.local`:
 ```env
 VITE_PIMLICO_API_KEY=your_key
-VITE_WALLET_CONNECT_PROJECT_ID=your_id
+VITE_SEPOLIA_RPC=your_quicknode_sepolia_url
+VITE_BASE_SEPOLIA_RPC=your_quicknode_base_sepolia_url
 VITE_ENVIO_ENDPOINT=http://localhost:8080/v1/graphql
 ```
 
 ## 📊 Envio Integration
 
 Multi-chain indexing on Sepolia and Base Sepolia:
+
+```bash
+# Start Envio indexer (optional - app works without it)
+cd indexer
+npx envio dev
+```
 
 ```yaml
 # indexer/config.yaml
