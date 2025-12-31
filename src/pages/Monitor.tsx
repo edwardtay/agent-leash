@@ -508,80 +508,97 @@ export function Monitor() {
               </div>
             )}
 
-            {/* Live Activity Feed */}
-            {envioStatus === "online" && (
-              <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] lg:sticky lg:top-6">
-                <div className="p-4 border-b border-[var(--border)]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                    </span>
-                    <h3 className="font-medium">Live Activity</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded">HyperSync</span>
-                    <span className="text-[10px] text-[var(--text-muted)]">Auto 3s</span>
-                    <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
-                      {indexedDeposits.length}
-                    </span>
-                  </div>
+            {/* Live Activity Feed - Always show */}
+            <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] lg:sticky lg:top-6">
+              <div className="p-4 border-b border-[var(--border)]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="relative flex h-2 w-2">
+                    {envioStatus === "online" ? (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </>
+                    ) : (
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500"></span>
+                    )}
+                  </span>
+                  <h3 className="font-medium">Live Activity</h3>
                 </div>
-                {indexedDeposits.length === 0 ? (
-                  <div className="p-4 text-center">
-                    <p className="text-[var(--text-muted)] text-sm">Watching...</p>
-                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Execute to see HyperSync</p>
-                  </div>
-                ) : (
-                  <div className="max-h-[60vh] overflow-y-auto">
-                    {indexedDeposits.map((d) => {
-                      // timestamp from Envio is BigInt unix timestamp in seconds
-                      let timestampMs = Date.now();
-                      if (d.timestamp) {
-                        const ts = typeof d.timestamp === 'string' ? parseInt(d.timestamp) : Number(d.timestamp);
-                        if (!isNaN(ts) && ts > 0) {
-                          timestampMs = ts * 1000;
-                        }
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${envioStatus === "online" ? "bg-purple-500/20 text-purple-400" : "bg-gray-500/20 text-gray-400"}`}>
+                    HyperSync
+                  </span>
+                  {envioStatus === "online" ? (
+                    <>
+                      <span className="text-[10px] text-[var(--text-muted)]">Auto 3s</span>
+                      <span className="text-[10px] px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
+                        {indexedDeposits.length}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-red-400">Connecting...</span>
+                  )}
+                </div>
+              </div>
+              {envioStatus !== "online" ? (
+                <div className="p-4 text-center">
+                  <p className="text-[var(--text-muted)] text-sm">⏳ Connecting to Envio...</p>
+                  <p className="text-[10px] text-[var(--text-muted)] mt-1">Indexer syncing, please wait</p>
+                </div>
+              ) : indexedDeposits.length === 0 ? (
+                <div className="p-4 text-center">
+                  <p className="text-[var(--text-muted)] text-sm">Watching...</p>
+                  <p className="text-[10px] text-[var(--text-muted)] mt-1">Execute to see HyperSync</p>
+                </div>
+              ) : (
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {indexedDeposits.map((d) => {
+                    // timestamp from Envio is BigInt unix timestamp in seconds
+                    let timestampMs = Date.now();
+                    if (d.timestamp) {
+                      const ts = typeof d.timestamp === 'string' ? parseInt(d.timestamp) : Number(d.timestamp);
+                      if (!isNaN(ts) && ts > 0) {
+                        timestampMs = ts * 1000;
                       }
-                      const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
-                      const timeAgo = isNaN(secondsAgo) || secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
-                      
-                      // Chain logos
-                      const isSepolia = d.chainId === 11155111;
-                      const chainLogo = isSepolia 
-                        ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg" 
-                        : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg";
-                      const chainName = isSepolia ? "Sepolia" : "Base";
-                      const chainColor = isSepolia ? "blue" : "purple";
-                      
-                      return (
-                        <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-1.5">
-                              <img src={chainLogo} alt={chainName} className="w-4 h-4" />
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-${chainColor}-500/20 text-${chainColor}-400`}>
-                                {chainName}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-[var(--text-muted)]">{timeAgo}</span>
+                    }
+                    const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
+                    const timeAgo = isNaN(secondsAgo) || secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                    
+                    // Chain logos
+                    const isSepolia = d.chainId === 11155111;
+                    const chainLogo = isSepolia 
+                      ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg" 
+                      : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg";
+                    const chainName = isSepolia ? "Sepolia" : "Base";
+                    const chainColor = isSepolia ? "blue" : "purple";
+                    
+                    return (
+                      <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5">
+                            <img src={chainLogo} alt={chainName} className="w-4 h-4" />
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-${chainColor}-500/20 text-${chainColor}-400`}>
+                              {chainName}
+                            </span>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{(Number(d.amount) / 1e18).toFixed(4)} ETH</span>
-                            <a
-                              href={`${isSepolia ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
-                              target="_blank"
-                              className="text-[10px] text-[var(--primary)] hover:underline"
-                            >
-                              Tx →
-                            </a>
-                          </div>
+                          <span className="text-[10px] text-[var(--text-muted)]">{timeAgo}</span>
                         </div>
-                      );
-                    })}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{(Number(d.amount) / 1e18).toFixed(4)} ETH</span>
+                          <a
+                            href={`${isSepolia ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
+                            target="_blank"
+                            className="text-[10px] text-[var(--primary)] hover:underline"
+                          >
+                            Tx →
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
                   </div>
                 )}
               </div>
-            )}
           </div>
         </div>
       </div>
