@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useSessionAccount } from "../providers/SessionAccountProvider";
 import { usePermissions, type PermissionConfig, type TokenKey } from "../hooks/usePermissions";
 import { AddressDisplay } from "../components/AddressDisplay";
 
@@ -42,7 +41,6 @@ const FREQ_SECONDS: Record<string, number> = { hourly: 3600, daily: 86400, weekl
 export function Grant() {
   const { isConnected } = useAccount();
   const chainId = useChainId();
-  const { sessionAccount } = useSessionAccount();
   const { requestPermission, isLoading, error, grantedPermissions, setError } = usePermissions();
   const navigate = useNavigate();
 
@@ -54,10 +52,13 @@ export function Grant() {
   }, []);
 
   const handleGrant = async () => {
-    if (!sessionAccount || !setup) return;
+    if (!setup) return;
 
     const perm = setup.permission;
     const tokenKey = (setup.token === "ETH" || setup.token === "WETH") ? "ETH" : "USDC";
+    
+    // Use the agent wallet from setup, NOT sessionAccount
+    const agentWalletAddress = setup.agentWallet as `0x${string}`;
     
     const config: PermissionConfig = {
       token: tokenKey as TokenKey,
@@ -65,10 +66,10 @@ export function Grant() {
       periodDuration: FREQ_SECONDS[perm?.frequency || setup.frequency || "daily"],
       durationDays: perm?.duration || setup.duration || 30,
       permissionType: "periodic",
-      agentWallet: sessionAccount.address,
+      agentWallet: agentWalletAddress,
     };
 
-    await requestPermission(config, sessionAccount.address);
+    await requestPermission(config, agentWalletAddress);
   };
 
   if (!setup) {
@@ -150,6 +151,30 @@ export function Grant() {
           <div className="text-right">
             <p className="text-xs text-[var(--text-muted)] mb-1">Agent Wallet</p>
             <AddressDisplay address={setup.agentWallet} chainId={chainId} />
+          </div>
+        </div>
+
+        {/* Chain Indicator */}
+        <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 ${
+          chainId === 11155111 
+            ? "bg-blue-500/10 border-blue-500/30" 
+            : "bg-purple-500/10 border-purple-500/30"
+        }`}>
+          <img 
+            src={chainId === 11155111 
+              ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg"
+              : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg"
+            } 
+            alt="chain" 
+            className="w-6 h-6" 
+          />
+          <div>
+            <p className={`text-sm font-medium ${chainId === 11155111 ? "text-blue-400" : "text-purple-400"}`}>
+              Permission will be granted on {chainId === 11155111 ? "Ethereum Sepolia" : "Base Sepolia"}
+            </p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Switch network in wallet header if needed before approving
+            </p>
           </div>
         </div>
 
