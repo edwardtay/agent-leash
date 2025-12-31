@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getExplorerAddressUrl, DEFAULT_CHAIN_ID } from "../config/chains";
 
 interface AddressDisplayProps {
   address: string;
@@ -7,12 +8,7 @@ interface AddressDisplayProps {
   truncate?: boolean;
 }
 
-const EXPLORERS: Record<number, string> = {
-  11155111: "https://sepolia.etherscan.io",
-  84532: "https://sepolia.basescan.org",
-};
-
-export function AddressDisplay({ address, chainId = 11155111, label, truncate = true }: AddressDisplayProps) {
+export function AddressDisplay({ address, chainId = DEFAULT_CHAIN_ID, label, truncate = true }: AddressDisplayProps) {
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = async () => {
@@ -21,7 +17,7 @@ export function AddressDisplay({ address, chainId = 11155111, label, truncate = 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const explorerUrl = `${EXPLORERS[chainId] || EXPLORERS[11155111]}/address/${address}`;
+  const explorerUrl = getExplorerAddressUrl(chainId, address);
   const displayAddress = truncate ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
 
   return (

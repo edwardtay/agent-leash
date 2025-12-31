@@ -1,17 +1,7 @@
 import { useCallback, useState } from "react";
 import { parseUnits } from "viem";
-import { sepolia, baseSepolia } from "viem/chains";
 import { useAccount, useChainId, useWalletClient } from "wagmi";
-
-// Chain-specific token configurations
-const CHAIN_TOKENS: Record<number, { USDC: `0x${string}` }> = {
-  [sepolia.id]: {
-    USDC: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-  },
-  [baseSepolia.id]: {
-    USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  },
-};
+import { getChain } from "../config/chains";
 
 // Token configurations (address will be resolved per chain)
 export const TOKENS = {
@@ -91,10 +81,10 @@ export const usePermissions = () => {
         const expiry = currentTime + config.durationDays * 86400;
         
         // Get chain-specific token address
-        const chainTokens = CHAIN_TOKENS[chainId] || CHAIN_TOKENS[sepolia.id];
+        const chainConfig = getChain(chainId);
         const token = {
           ...TOKENS[config.token],
-          address: config.token === "USDC" ? chainTokens.USDC : TOKENS[config.token].address,
+          address: config.token === "USDC" ? chainConfig.contracts.USDC : TOKENS[config.token].address,
         };
         
         const justification =

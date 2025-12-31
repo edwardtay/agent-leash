@@ -4,25 +4,8 @@
  */
 
 import { createPublicClient, createWalletClient, http, parseEther, encodeFunctionData, type Hex } from "viem";
-import { sepolia, baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
-
-const SEPOLIA_RPC = import.meta.env.VITE_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
-const BASE_SEPOLIA_RPC = import.meta.env.VITE_BASE_SEPOLIA_RPC || "https://sepolia.base.org";
-
-// Chain configs
-const CHAIN_CONFIG: Record<number, { chain: typeof sepolia | typeof baseSepolia; rpc: string; usdc: `0x${string}` }> = {
-  [sepolia.id]: {
-    chain: sepolia,
-    rpc: SEPOLIA_RPC,
-    usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-  },
-  [baseSepolia.id]: {
-    chain: baseSepolia,
-    rpc: BASE_SEPOLIA_RPC,
-    usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  },
-};
+import { getChain, DEFAULT_CHAIN_ID } from "../config/chains";
 
 const VAULT_ABI = [
   { name: "deposit", type: "function", inputs: [], outputs: [], stateMutability: "payable" },
@@ -76,15 +59,15 @@ export async function executeVaultDeposit(
   vaultAddress: `0x${string}`,
   amount: string,
   agentWallet?: string,
-  chainId: number = sepolia.id
+  chainId: number = DEFAULT_CHAIN_ID
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
   const account = privateKeyToAccount(agentPrivateKey);
   const agentAddr = agentWallet || account.address;
 
-  // Get chain config - default to sepolia if unknown chain
-  const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
-  console.log(`Executing on chain ${chainId} (${config.chain.name})`);
+  // Get chain config
+  const chainConfig = getChain(chainId);
+  console.log(`Executing on chain ${chainId} (${chainConfig.name})`);
 
   try {
     const storedPerm = getLatestPermission();
@@ -104,15 +87,15 @@ export async function executeVaultDeposit(
       return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr, chainId);
     }
 
-    const walletClient = createWalletClient({ account, chain: config.chain, transport: http(config.rpc) });
-    const publicClient = createPublicClient({ chain: config.chain, transport: http(config.rpc) });
+    const walletClient = createWalletClient({ account, chain: chainConfig.chain, transport: http(chainConfig.rpc) });
+    const publicClient = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) });
 
     const { erc7710WalletActions } = await import("@metamask/smart-accounts-kit/actions");
     const extendedClient = walletClient.extend(erc7710WalletActions());
 
     const txHash = await extendedClient.sendTransactionWithDelegation({
       account,
-      chain: config.chain,
+      chain: chainConfig.chain,
       to: vaultAddress,
       value: parseEther(amount),
       data: encodeFunctionData({ abi: VAULT_ABI, functionName: "deposit" }),
@@ -142,7 +125,7 @@ async function executeVaultDepositDirect(
   vaultAddress: `0x${string}`,
   amount: string,
   agentWallet?: string,
-  chainId: number = sepolia.id
+  chainId: number = DEFAULT_CHAIN_ID
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
 
@@ -151,10 +134,10 @@ async function executeVaultDepositDirect(
     const agentAddr = agentWallet || account.address;
     
     // Get chain config
-    const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
+    const chainConfig = getChain(chainId);
     
-    const walletClient = createWalletClient({ account, chain: config.chain, transport: http(config.rpc) });
-    const publicClient = createPublicClient({ chain: config.chain, transport: http(config.rpc) });
+    const walletClient = createWalletClient({ account, chain: chainConfig.chain, transport: http(chainConfig.rpc) });
+    const publicClient = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) });
 
     const txHash = await walletClient.sendTransaction({
       to: vaultAddress,
@@ -181,18 +164,18 @@ async function executeVaultDepositDirect(
  */
 export async function getUserSmartAccountBalance(
   address: `0x${string}`,
-  chainId: number = sepolia.id
+  chainId: number = DEFAULT_CHAIN_ID
 ): Promise<{ eth: string; usdc: string }> {
   try {
-    const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
-    const publicClient = createPublicClient({ chain: config.chain, transport: http(config.rpc) });
+    const chainConfig = getChain(chainId);
+    const publicClient = createPublicClient({ chain: chainConfig.chain, transport: http(chainConfig.rpc) });
 
     const ethBalance = await publicClient.getBalance({ address });
     
     let usdcBalance = BigInt(0);
     try {
       usdcBalance = await publicClient.readContract({
-        address: config.usdc,
+        address: chainConfig.contracts.USDC,
         abi: ERC20_ABI,
         functionName: "balanceOf",
         args: [address],

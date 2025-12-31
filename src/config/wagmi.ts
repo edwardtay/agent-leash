@@ -1,9 +1,7 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http } from "wagmi";
 import { sepolia, baseSepolia } from "wagmi/chains";
-
-const SEPOLIA_RPC = import.meta.env.VITE_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
-const BASE_SEPOLIA_RPC = import.meta.env.VITE_BASE_SEPOLIA_RPC || "https://sepolia.base.org";
+import { SEPOLIA_RPC, BASE_SEPOLIA_RPC, CHAINS } from "./chains";
 
 export const config = getDefaultConfig({
   appName: "AgentLeash",
@@ -15,17 +13,5 @@ export const config = getDefaultConfig({
   },
 });
 
-export const SUPPORTED_CHAINS = {
-  sepolia: {
-    id: sepolia.id,
-    name: "Sepolia",
-    explorer: "https://sepolia.etherscan.io",
-    rpc: SEPOLIA_RPC,
-  },
-  baseSepolia: {
-    id: baseSepolia.id,
-    name: "Base Sepolia",
-    explorer: "https://sepolia.basescan.org",
-    rpc: BASE_SEPOLIA_RPC,
-  },
-};
+// Re-export CHAINS for convenience
+export { CHAINS };

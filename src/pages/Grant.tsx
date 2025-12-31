@@ -4,6 +4,7 @@ import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { usePermissions, type PermissionConfig, type TokenKey } from "../hooks/usePermissions";
 import { AddressDisplay } from "../components/AddressDisplay";
+import { getChain } from "../config/chains";
 
 interface AgentSetup {
   agentType: string;
@@ -155,28 +156,22 @@ export function Grant() {
         </div>
 
         {/* Chain Indicator */}
-        <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 ${
-          chainId === 11155111 
-            ? "bg-blue-500/10 border-blue-500/30" 
-            : "bg-purple-500/10 border-purple-500/30"
-        }`}>
-          <img 
-            src={chainId === 11155111 
-              ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg"
-              : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg"
-            } 
-            alt="chain" 
-            className="w-6 h-6" 
-          />
-          <div>
-            <p className={`text-sm font-medium ${chainId === 11155111 ? "text-blue-400" : "text-purple-400"}`}>
-              Permission will be granted on {chainId === 11155111 ? "Ethereum Sepolia" : "Base Sepolia"}
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">
-              Switch network in wallet header if needed before approving
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const chain = getChain(chainId);
+          return (
+            <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 bg-${chain.color}-500/10 border-${chain.color}-500/30`}>
+              <img src={chain.logo} alt={chain.shortName} className="w-6 h-6" />
+              <div>
+                <p className={`text-sm font-medium ${chain.colorClass}`}>
+                  Permission will be granted on {chain.name}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Switch network in wallet header if needed before approving
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Two Schedules */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

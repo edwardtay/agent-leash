@@ -18,7 +18,7 @@ import {
 import { checkEnvioHealth, getVaultDeposits, type VaultDeposit } from "../lib/envio";
 import { AddressDisplay } from "../components/AddressDisplay";
 import { Toast, useToast } from "../components/Toast";
-import { getVaultAddress } from "../config/contracts";
+import { getChain, getExplorerTxUrl, getVaultAddress } from "../config/chains";
 
 // Agent type icons
 const AGENT_ICONS: Record<string, string> = {
@@ -672,7 +672,7 @@ export function Monitor() {
                       <>❌ {thisExecution.error || "Failed"}</>
                     )}
                     {thisExecution.txHash && (
-                      <a href={`https://sepolia.etherscan.io/tx/${thisExecution.txHash}`} target="_blank" className="ml-2 text-[var(--primary)]">View →</a>
+                      <a href={getExplorerTxUrl(chainId, thisExecution.txHash)} target="_blank" className="ml-2 text-[var(--primary)]">View →</a>
                     )}
                   </div>
                 )}
@@ -777,21 +777,16 @@ export function Monitor() {
                     const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
                     const timeAgo = isNaN(secondsAgo) || secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
                     
-                    // Chain logos
-                    const isSepolia = d.chainId === 11155111;
-                    const chainLogo = isSepolia 
-                      ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg" 
-                      : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg";
-                    const chainName = isSepolia ? "Sepolia" : "Base";
-                    const chainColor = isSepolia ? "blue" : "purple";
+                    // Get chain config dynamically
+                    const depositChain = getChain(d.chainId);
                     
                     return (
                       <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-1.5">
-                            <img src={chainLogo} alt={chainName} className="w-4 h-4" />
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-${chainColor}-500/20 text-${chainColor}-400`}>
-                              {chainName}
+                            <img src={depositChain.logo} alt={depositChain.shortName} className="w-4 h-4" />
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${depositChain.bgClass} ${depositChain.colorClass}`}>
+                              {depositChain.shortName}
                             </span>
                           </div>
                           <span className="text-[10px] text-[var(--text-muted)]">{timeAgo}</span>
@@ -799,7 +794,7 @@ export function Monitor() {
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">{(Number(d.amount) / 1e18).toFixed(4)} ETH</span>
                           <a
-                            href={`${isSepolia ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
+                            href={getExplorerTxUrl(d.chainId, d.txHash)}
                             target="_blank"
                             className="text-[10px] text-[var(--primary)] hover:underline"
                           >

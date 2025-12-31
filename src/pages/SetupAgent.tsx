@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { getVaultAddress, getAaveWrapperAddress, getYieldVaultAddress } from "../config/contracts";
+import { getVaultAddress, getAaveWrapperAddress, getYieldVaultAddress, hasAaveSupport, getChain } from "../config/chains";
 import { AddressDisplay } from "../components/AddressDisplay";
 
 type AgentType = "dca" | "transfer" | "gas" | "vault";
@@ -287,8 +287,8 @@ export function SetupAgent() {
                   >
                     🏦 YieldVault
                   </button>
-                  {/* AaveWrapper - only on Sepolia */}
-                  {chainId === 11155111 && (
+                  {/* AaveWrapper - only on chains with Aave support */}
+                  {hasAaveSupport(chainId) && (
                     <button
                       onClick={() => setRecipient(getAaveWrapperAddress(chainId) || "")}
                       className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
@@ -323,7 +323,7 @@ export function SetupAgent() {
               {config.isContract && recipient && (
                 <p className="text-[10px] mt-2">
                   {recipient === getYieldVaultAddress(chainId) ? (
-                    <span className="text-green-400">✓ YieldVault: unified interface on {chainId === 11155111 ? "Sepolia" : "Base Sepolia"}</span>
+                    <span className="text-green-400">✓ YieldVault: unified interface on {getChain(chainId).name}</span>
                   ) : recipient === getAaveWrapperAddress(chainId) ? (
                     <span className="text-purple-400">✓ AaveWrapper: ETH → WETH → Aave V3 (real yield!)</span>
                   ) : recipient === getVaultAddress(chainId) ? (
@@ -335,9 +335,9 @@ export function SetupAgent() {
               )}
               {config.isContract && !recipient && (
                 <p className="text-[10px] text-[var(--text-muted)] mt-2">
-                  {chainId === 11155111 
+                  {hasAaveSupport(chainId) 
                     ? "YieldVault or Aave V3 for yield, Demo for testing"
-                    : "YieldVault (same interface as Sepolia) or Demo"}
+                    : "YieldVault (same interface) or Demo"}
                 </p>
               )}
             </div>
