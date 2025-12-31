@@ -2,19 +2,9 @@
 
 **Your AI agents are spending your money. Shouldn't you have a leash on them?**
 
-AgentLeash solves the "runaway agent" problem — AI agents with unlimited wallet access can drain funds in seconds. We give you granular, time-limited spending controls using MetaMask's ERC-7715 permissions, so your agents can only spend what you allow, when you allow it.
+AgentLeash solves the "runaway agent" problem — AI agents with unlimited wallet access can drain funds in seconds. We give you granular, time-limited spending controls using ERC-7715 permissions, so your agents can only spend what you allow, when you allow it.
 
-## 🎯 Hackathon Submission
-
-**MetaMask Advanced Permissions Dev Cook-Off**
-
-### Requirements Met:
-- ✅ **ERC-7715 Advanced Permissions** - Grant fine-grained spending limits to agents
-- ✅ **Smart Accounts Kit** - Full integration with `erc7715ProviderActions` and `erc7710WalletActions`
-- ✅ **Working Demo** - Real transactions on Sepolia & Base Sepolia
-- ✅ **Envio HyperSync** - Multi-chain real-time indexing with live activity feed
-
-## 🔑 Key Innovation: ERC-7715 Flow
+## 🔑 How It Works
 
 ```
 Traditional Flow (Dangerous):
@@ -28,181 +18,95 @@ User grants Permission → Agent signs tx → User's wallet pays → 🔐 Contro
 
 ## 🤖 Agent Types
 
-| Agent | Icon | What it does | Use Case |
-|-------|------|-------------|----------|
-| **DCA Bot** | 📈 | Swap tokens on schedule (ETH ↔ USDC) | Dollar-cost averaging |
-| **Auto-Transfer** | 💸 | Send tokens periodically | Recurring payments |
-| **Gas Refiller** | ⛽ | Top up wallet when ETH below threshold | Keep bots funded |
-| **Auto-Deposit** | 🏦 | Deposit to Aave (yield) or demo vault | Automated savings |
+| Agent | What it does |
+|-------|-------------|
+| 📈 **DCA Bot** | Swap tokens on schedule (ETH ↔ USDC) |
+| 💸 **Auto-Transfer** | Send tokens periodically |
+| ⛽ **Gas Refiller** | Top up wallet when ETH below threshold |
+| 🏦 **Auto-Deposit** | Deposit to yield vaults automatically |
 
-## � How It Works
-
-```
-1. Setup    → Choose agent type, set execution schedule & permission limits
-2. Grant    → Approve ERC-7715 permission via MetaMask Flask
-3. Monitor  → View all agents, their targets, and permissions
-4. Execute  → Agent signs, YOUR wallet pays (within limits)
-5. Track    → Live activity feed powered by Envio HyperSync
-```
-
-## 🚀 Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
-- **MetaMask Flask v13.5+** (required for ERC-7715)
+- MetaMask Flask v13.5+ (required for ERC-7715)
 - Node.js 18+
-- Sepolia ETH (get from faucet)
+- Testnet ETH (Sepolia or Base Sepolia)
 
 ### Installation
 
 ```bash
-cd agent-leash
 npm install
+npm run dev
 ```
 
-### Environment Setup
+### Environment
 
 Create `.env.local`:
 ```env
 VITE_WALLETCONNECT_PROJECT_ID=your_project_id
-VITE_SEPOLIA_RPC=https://your-quicknode-sepolia-endpoint
-VITE_BASE_SEPOLIA_RPC=https://your-quicknode-base-sepolia-endpoint
-VITE_ENVIO_ENDPOINT=http://localhost:8080/v1/graphql
+VITE_SEPOLIA_RPC=https://your-rpc-endpoint
+VITE_BASE_SEPOLIA_RPC=https://your-base-rpc-endpoint
 ```
-
-### Run the App
-
-```bash
-npm run dev
-```
-
-### Run Envio Indexer (Optional)
-
-```bash
-cd indexer
-pnpm install
-npx envio dev
-```
-
-## 📊 Envio HyperSync Integration
-
-Real-time multi-chain indexing across Sepolia and Base Sepolia:
-
-### Features:
-- 🔴 **Live Activity Feed** - Auto-refreshes every 3 seconds
-- ⚡ **HyperSync Speed** - 100,000+ blocks/sec backfill
-- 🌐 **Multi-Chain** - Unified view of Sepolia + Base Sepolia
-- 📈 **Indexed Events** - Vault deposits, withdrawals, daily stats
-
-### Indexed Contracts:
-| Network | Contract | Address |
-|---------|----------|---------|
-| Sepolia | SimpleVault | `0x9acec7011519F89C59d9A595f9829bBb79Ed0d4b` |
-| Sepolia | AaveWrapper | `0xdb1acDc06b6b6Fb711EC111376F410954362f9BA` |
-| Base Sepolia | SimpleVault | `0x93fc90a3Fb7d8c15bbaF50bFCc612B26CA8E68c8` |
-
-### AaveWrapper (Real Yield!)
-The AaveWrapper contract wraps ETH → WETH → Aave V3 in a single `deposit()` call:
-- User sends ETH to AaveWrapper
-- Contract wraps to WETH and supplies to Aave V3 Pool
-- User receives aWETH (yield-bearing token)
-- Earns real Aave interest on Sepolia testnet
 
 ## 🏗 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    User's Wallet (EOA)                  │
-│                   (Funds stay here!)                    │
+│                    User's Wallet                        │
+│                   (Funds stay here)                     │
 └─────────────────────┬───────────────────────────────────┘
-                      │ ERC-7715 Permission Grant
+                      │ ERC-7715 Permission
                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│                    Agent Wallet (Signer)                │
-│              (Signs txs, doesn't hold funds)            │
+│                    Agent Wallet                         │
+│              (Signs txs, no funds)                      │
 └─────────────────────┬───────────────────────────────────┘
-                      │ sendTransactionWithDelegation()
+                      │ Execute with delegation
                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│              Sepolia / Base Sepolia                     │
-│                 SimpleVault.deposit()                   │
+│              Target Contract (Vault)                    │
 └─────────────────────┬───────────────────────────────────┘
-                      │ Events emitted
+                      │ Events
                       ▼
 ┌─────────────────────────────────────────────────────────┐
-│                 Envio HyperSync                         │
-│            (Real-time multi-chain indexing)             │
-└─────────────────────┬───────────────────────────────────┘
-                      │ GraphQL API
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                 AgentLeash Dashboard                    │
-│              (Live activity feed, analytics)            │
+│              Envio HyperSync Indexer                    │
+│            (Real-time multi-chain tracking)             │
 └─────────────────────────────────────────────────────────┘
-```
-
-## 📁 Project Structure
-
-```
-agent-leash/
-├── src/
-│   ├── pages/
-│   │   ├── Home.tsx          # Landing page
-│   │   ├── SetupSelect.tsx   # Choose agent type
-│   │   ├── SetupAgent.tsx    # Configure agent & permissions
-│   │   ├── Grant.tsx         # ERC-7715 permission request
-│   │   └── Monitor.tsx       # Dashboard with live feed
-│   ├── lib/
-│   │   ├── agent.ts          # ERC-7710 execution with delegation
-│   │   ├── envio.ts          # Envio GraphQL client
-│   │   └── permissions.ts    # Permission management
-│   ├── hooks/
-│   │   └── usePermissions.ts # ERC-7715 permission hook
-│   └── components/
-│       ├── Header.tsx        # Wallet connect button
-│       └── AddressDisplay.tsx
-├── contracts/
-│   ├── SimpleVault.sol       # Demo vault (no yield)
-│   └── AaveWrapper.sol       # Aave V3 wrapper (real yield!)
-├── indexer/
-│   ├── config.yaml           # Envio multi-chain config
-│   ├── schema.graphql        # GraphQL schema
-│   └── src/EventHandlers.ts  # Event handlers
-└── script/
-    └── deploy.sh             # Contract deployment script
 ```
 
 ## 🔧 Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Vite + React 19 + TypeScript |
-| Styling | Tailwind CSS v4 |
-| Wallet | RainbowKit + Wagmi v2 |
-| Permissions | MetaMask Smart Accounts Kit (ERC-7715/7710) |
-| Indexer | Envio HyperIndex + HyperSync |
+| Frontend | React + TypeScript + Vite |
+| Styling | Tailwind CSS |
+| Wallet | RainbowKit + Wagmi |
+| Permissions | ERC-7715 / ERC-7710 |
+| Indexer | Envio HyperIndex |
 | Networks | Sepolia, Base Sepolia |
 | Contracts | Solidity + Foundry |
 
-## 🎬 Demo Flow
+## 📁 Structure
 
-1. **Connect** - MetaMask Flask wallet
-2. **Setup** - Click "+ New Agent" → Choose "Savings Vault"
-3. **Configure** - Set 0.001 ETH/daily, 7 days duration
-4. **Grant** - Click "Approve Permission" → MetaMask popup
-5. **Monitor** - See agent card with vault address
-6. **Execute** - Click "⚡ Execute" → Watch tx confirm
-7. **Track** - See deposit appear in Live Activity feed (HyperSync!)
-8. **Manage** - Delete agents, revoke permissions anytime
+```
+├── src/
+│   ├── pages/          # App pages (Setup, Grant, Monitor)
+│   ├── lib/            # Core logic (agent, permissions, envio)
+│   ├── hooks/          # React hooks
+│   └── components/     # UI components
+├── contracts/          # Solidity contracts
+├── indexer/            # Envio indexer config
+└── script/             # Deployment scripts
+```
 
-## ⚠️ Important Notes
+## ⚠️ Notes
 
-- **MetaMask Flask Required** - Regular MetaMask doesn't support ERC-7715 yet
-- **Testnet Only** - Sepolia and Base Sepolia
-- **Funds Stay Safe** - Agent signs, but YOUR wallet pays via delegation
+- Requires MetaMask Flask (regular MetaMask doesn't support ERC-7715 yet)
+- Currently testnet only (Sepolia, Base Sepolia)
+- Funds stay in your wallet - agent only has delegated permission
 
 ## 🔗 Links
 
-- [MetaMask Smart Accounts Kit](https://docs.metamask.io/wallet/concepts/smart-accounts/)
 - [ERC-7715 Spec](https://eips.ethereum.org/EIPS/eip-7715)
 - [Envio HyperIndex](https://docs.envio.dev/)
 
