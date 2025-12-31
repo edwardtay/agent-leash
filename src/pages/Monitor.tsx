@@ -459,6 +459,42 @@ export function Monitor() {
                   <span className="text-[var(--text-muted)] ml-2">• {agent.permission?.type}</span>
                 </div>
 
+                {/* Active Permissions for this agent */}
+                {(() => {
+                  const agentPerms = permissions.filter(p => 
+                    !p.isRevoked && 
+                    p.timeRemaining > 0 && 
+                    p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase()
+                  );
+                  if (agentPerms.length === 0) return null;
+                  return (
+                    <div className="mt-2 p-2 bg-purple-500/5 border border-purple-500/30 rounded-lg">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-purple-400 font-medium">Active Permissions ({agentPerms.length})</span>
+                      </div>
+                      {agentPerms.map((p) => {
+                        const originalIndex = permissions.findIndex(perm => perm.id === p.id);
+                        const isThisRevoking = isRevoking === p.id;
+                        return (
+                          <div key={p.id} className="flex items-center justify-between py-1 border-t border-purple-500/20 first:border-0">
+                            <div>
+                              <span className="text-xs">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</span>
+                              <span className="text-[10px] text-[var(--text-muted)] ml-2">{formatTimeRemaining(p.timeRemaining)} left</span>
+                            </div>
+                            <button 
+                              onClick={() => handleRevokePermission(p.id, originalIndex)} 
+                              disabled={isThisRevoking}
+                              className="px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
+                            >
+                              {isThisRevoking ? "⏳" : "Revoke"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
                 {/* Execution result */}
                 {thisExecution && (
                   <div className={`mt-2 p-2 rounded text-xs ${thisExecution.success ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
@@ -478,36 +514,8 @@ export function Monitor() {
         </div>
           </div>
 
-          {/* Right Column - Permissions & Live Activity */}
+          {/* Right Column - Live Activity */}
           <div className="lg:col-span-1 space-y-4">
-            {/* Active Permissions */}
-            {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length > 0 && (
-              <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-                <div className="p-3 border-b border-[var(--border)]">
-                  <h3 className="font-medium text-sm">Active Permissions ({permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).length})</h3>
-                </div>
-                {permissions.filter(p => !p.isRevoked && p.timeRemaining > 0).map((p) => {
-                  const originalIndex = permissions.findIndex(perm => perm.id === p.id);
-                  const isThisRevoking = isRevoking === p.id;
-                  return (
-                    <div key={p.id} className="p-2 border-b border-[var(--border)] last:border-0 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-medium">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</p>
-                        <p className="text-[10px] text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</p>
-                      </div>
-                      <button 
-                        onClick={() => handleRevokePermission(p.id, originalIndex)} 
-                        disabled={isThisRevoking}
-                        className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
-                      >
-                        {isThisRevoking ? "⏳" : "Revoke"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
             {/* Live Activity Feed - Always show */}
             <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] lg:sticky lg:top-6">
               <div className="p-4 border-b border-[var(--border)]">
