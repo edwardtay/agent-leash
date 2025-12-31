@@ -451,14 +451,26 @@ export function Monitor() {
             const daysLeft = permEndDate ? Math.ceil((permEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
             const agentIcon = AGENT_ICONS[agent.agentType] || "🤖";
             
-            // Calculate next execution time based on frequency
+            // Calculate next execution time based on last execution
             const freqSeconds: Record<string, number> = { hourly: 3600, daily: 86400, weekly: 604800 };
             const freq = agent.permission?.frequency || "daily";
             const periodSec = freqSeconds[freq] || 86400;
-            // For demo, show countdown from now (in production, track last execution)
-            const nextExecIn = periodSec - (Math.floor(Date.now() / 1000) % periodSec);
+            
+            // Get last execution for this agent to calculate real countdown
+            const agentExecs = getAgentExecutions(agent.agentWallet);
+            const lastExecTime = agentExecs.length > 0 
+              ? Math.max(...agentExecs.map(e => e.timestamp)) / 1000 // convert to seconds
+              : 0;
+            
+            // Calculate time until next execution
+            const timeSinceLastExec = Math.floor(Date.now() / 1000) - lastExecTime;
+            const nextExecIn = lastExecTime > 0 
+              ? Math.max(0, periodSec - timeSinceLastExec)
+              : 0; // If never executed, show 0 (ready now)
+            
             const nextExecHours = Math.floor(nextExecIn / 3600);
             const nextExecMins = Math.floor((nextExecIn % 3600) / 60);
+            const isReadyToExecute = nextExecIn === 0;
 
             return (
               <div key={agent.agentWallet} className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
@@ -477,8 +489,8 @@ export function Monitor() {
                             {daysLeft <= 0 ? "Expired" : `${daysLeft}d left`}
                           </span>
                         )}
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
-                          ⏱ {nextExecHours}h {nextExecMins}m
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${isReadyToExecute ? "bg-green-500/20 text-green-400" : "bg-blue-500/10 text-blue-400"}`}>
+                          {isReadyToExecute ? "✓ Ready" : `⏱ ${nextExecHours}h ${nextExecMins}m`}
                         </span>
                       </div>
                     </div>
