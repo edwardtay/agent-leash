@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { useAccount, useChainId } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { getVaultAddress } from "../config/contracts";
+import { getVaultAddress, getAaveWrapperAddress, getYieldVaultAddress } from "../config/contracts";
 import { AddressDisplay } from "../components/AddressDisplay";
 
 type AgentType = "dca" | "transfer" | "gas" | "vault";
@@ -28,15 +28,17 @@ const AGENT_CONFIG: Record<AgentType, {
   recipientLabel: string;
   recipientPlaceholder: string;
   isContract?: boolean;
+  isSwap?: boolean;
 }> = {
   dca: {
     name: "DCA Bot",
     icon: "📈",
-    desc: "Dollar-cost average into tokens on a schedule",
+    desc: "Dollar-cost average: swap tokens on a schedule",
     tokens: ["ETH", "USDC"],
     needsRecipient: false,
     recipientLabel: "",
     recipientPlaceholder: "",
+    isSwap: true,
   },
   transfer: {
     name: "Auto-Transfer",
@@ -57,13 +59,13 @@ const AGENT_CONFIG: Record<AgentType, {
     recipientPlaceholder: "0x... (bot wallet to top up)",
   },
   vault: {
-    name: "Savings Vault",
+    name: "Auto-Deposit",
     icon: "🏦",
-    desc: "Auto-deposit to a vault contract",
+    desc: "Auto-deposit to vault (demo or Aave yield)",
     tokens: ["ETH", "USDC"],
     needsRecipient: true,
-    recipientLabel: "Vault Contract Address",
-    recipientPlaceholder: "0x... (deployed vault contract)",
+    recipientLabel: "Vault Address",
+    recipientPlaceholder: "0x... (select below or paste custom)",
     isContract: true,
   },
 };
@@ -93,9 +95,10 @@ export function SetupAgent() {
   // Auto-fill vault address for vault agent
   useEffect(() => {
     if (agentType === "vault" && chainId) {
-      const vaultAddr = getVaultAddress(chainId);
-      if (vaultAddr && vaultAddr !== "0x0000000000000000000000000000000000000000") {
-        setRecipient(vaultAddr);
+      // Default to YieldVault (works on all chains)
+      const yieldVaultAddr = getYieldVaultAddress(chainId);
+      if (yieldVaultAddr) {
+        setRecipient(yieldVaultAddr);
       }
     }
   }, [agentType, chainId]);
@@ -103,6 +106,10 @@ export function SetupAgent() {
   const [execFrequency, setExecFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
   const [execAmount, setExecAmount] = useState("0.001");
   const [execDuration, setExecDuration] = useState(7); // days
+  
+  // Gas Refiller specific: threshold trigger
+  const [triggerThreshold, setTriggerThreshold] = useState("0.005"); // trigger when below this
+  const [topUpAmount, setTopUpAmount] = useState("0.01"); // amount to top up
   
   // Permission/Funds Grant (can be different from execution)
   const [permFrequency, setPermFrequency] = useState<"hourly" | "daily" | "weekly">("daily");
@@ -118,7 +125,7 @@ export function SetupAgent() {
 
   // Calculate execution cycles
   const execCycles = Math.floor(execDuration * 86400 / FREQ_OPTIONS[execFrequency].seconds);
-  const execTotalSpend = parseFloat(execAmount) * execCycles;
+  const execTotalSpend = parseFloat(agentType === "gas" ? topUpAmount : execAmount) * execCycles;
   const execEndDate = new Date(Date.now() + execDuration * 86400000);
 
   // Calculate permission cycles
@@ -168,14 +175,20 @@ export function SetupAgent() {
       agentPrivateKey: agentWallet.privateKey,
       token: selectedToken,
       recipient: recipient || null,
+      // Gas refiller specific
+      ...(agentType === "gas" && {
+        triggerThreshold,
+        topUpAmount,
+      }),
       // Execution schedule
       execution: {
         frequency: execFrequency,
-        amount: execAmount,
+        amount: agentType === "gas" ? topUpAmount : execAmount,
         duration: execDuration,
         cycles: execCycles,
         totalSpend: execTotalSpend,
         endDate: execEndDate.toISOString(),
+        ...(agentType === "gas" && { triggerThreshold }),
       },
       // Permission grant
       permission: {
@@ -229,7 +242,9 @@ export function SetupAgent() {
             />
           </div>
           <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-            <label className="block text-xs text-[var(--text-muted)] mb-2">Token</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-2">
+              {config.isSwap ? "Spend Token" : "Token"}
+            </label>
             <div className="flex gap-2">
               {config.tokens.map((t) => (
                 <button
@@ -243,6 +258,14 @@ export function SetupAgent() {
                 </button>
               ))}
             </div>
+            {config.isSwap && (
+              <p className="text-xs text-[var(--text-muted)] mt-2 flex items-center gap-2">
+                <span className="font-semibold text-white">{selectedToken}</span>
+                <span>→</span>
+                <span className="font-semibold text-[var(--primary)]">{selectedToken === "ETH" ? "USDC" : "ETH"}</span>
+                <span className="text-[10px]">(swap direction)</span>
+              </p>
+            )}
           </div>
           {config.needsRecipient && (
             <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
@@ -250,6 +273,46 @@ export function SetupAgent() {
                 {config.recipientLabel}
                 {config.isContract && <span className="ml-1 text-yellow-400">(smart contract)</span>}
               </label>
+              {/* Vault quick-select buttons */}
+              {agentType === "vault" && (
+                <div className="flex gap-2 mb-2">
+                  {/* YieldVault - available on all chains */}
+                  <button
+                    onClick={() => setRecipient(getYieldVaultAddress(chainId) || "")}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
+                      recipient === getYieldVaultAddress(chainId) 
+                        ? "bg-green-500 text-white" 
+                        : "bg-[var(--bg-dark)] text-[var(--text-muted)] hover:border-green-500 border border-transparent"
+                    }`}
+                  >
+                    🏦 YieldVault
+                  </button>
+                  {/* AaveWrapper - only on Sepolia */}
+                  {chainId === 11155111 && (
+                    <button
+                      onClick={() => setRecipient(getAaveWrapperAddress(chainId) || "")}
+                      className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
+                        recipient === getAaveWrapperAddress(chainId) 
+                          ? "bg-purple-500 text-white" 
+                          : "bg-[var(--bg-dark)] text-[var(--text-muted)] hover:border-purple-500 border border-transparent"
+                      }`}
+                    >
+                      🔮 Aave V3
+                    </button>
+                  )}
+                  {/* SimpleVault - demo */}
+                  <button
+                    onClick={() => setRecipient(getVaultAddress(chainId) || "")}
+                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium ${
+                      recipient === getVaultAddress(chainId) 
+                        ? "bg-blue-500 text-white" 
+                        : "bg-[var(--bg-dark)] text-[var(--text-muted)] hover:border-blue-500 border border-transparent"
+                    }`}
+                  >
+                    📦 Demo
+                  </button>
+                </div>
+              )}
               <input
                 type="text"
                 value={recipient}
@@ -258,13 +321,23 @@ export function SetupAgent() {
                 className="w-full px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono text-xs"
               />
               {config.isContract && recipient && (
-                <p className="text-[10px] text-green-400 mt-2">
-                  ✓ Using deployed SimpleVault on {chainId === 11155111 ? "Sepolia" : chainId === 84532 ? "Base Sepolia" : "current network"}
+                <p className="text-[10px] mt-2">
+                  {recipient === getYieldVaultAddress(chainId) ? (
+                    <span className="text-green-400">✓ YieldVault: unified interface on {chainId === 11155111 ? "Sepolia" : "Base Sepolia"}</span>
+                  ) : recipient === getAaveWrapperAddress(chainId) ? (
+                    <span className="text-purple-400">✓ AaveWrapper: ETH → WETH → Aave V3 (real yield!)</span>
+                  ) : recipient === getVaultAddress(chainId) ? (
+                    <span className="text-blue-400">✓ SimpleVault: demo contract</span>
+                  ) : (
+                    <span className="text-yellow-400">✓ Custom contract address</span>
+                  )}
                 </p>
               )}
               {config.isContract && !recipient && (
                 <p className="text-[10px] text-[var(--text-muted)] mt-2">
-                  Agent will call deposit() on this contract
+                  {chainId === 11155111 
+                    ? "YieldVault or Aave V3 for yield, Demo for testing"
+                    : "YieldVault (same interface as Sepolia) or Demo"}
                 </p>
               )}
             </div>
@@ -276,11 +349,52 @@ export function SetupAgent() {
           {/* Agent Execution Schedule */}
           <div className="p-5 bg-blue-500/5 border border-blue-500/30 rounded-xl">
             <h3 className="font-semibold text-blue-400 mb-4">🤖 Agent Execution Schedule</h3>
-            <p className="text-xs text-[var(--text-muted)] mb-4">When and how much the agent executes each time</p>
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+              {agentType === "gas" 
+                ? "When to check balance and how much to top up" 
+                : "When and how much the agent executes each time"}
+            </p>
             
             <div className="space-y-4">
+              {/* Gas Refiller: Threshold trigger */}
+              {agentType === "gas" && (
+                <>
+                  <div>
+                    <label className="block text-xs text-[var(--text-muted)] mb-2">Trigger When Balance Below</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={triggerThreshold}
+                        onChange={(e) => setTriggerThreshold(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
+                        placeholder="0.005"
+                      />
+                      <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">ETH</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Agent will top up when target wallet has less than this</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[var(--text-muted)] mb-2">Top Up Amount</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={topUpAmount}
+                        onChange={(e) => setTopUpAmount(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
+                        placeholder="0.01"
+                      />
+                      <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">ETH</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--text-muted)] mt-1">Amount to send when threshold is triggered</p>
+                  </div>
+                </>
+              )}
+
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-2">Execute Every</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-2">
+                  {agentType === "gas" ? "Check Every" : "Execute Every"}
+                </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(Object.keys(FREQ_OPTIONS) as Array<keyof typeof FREQ_OPTIONS>).map((f) => (
                     <button
@@ -296,18 +410,21 @@ export function SetupAgent() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-2">Amount per Execution</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={execAmount}
-                    onChange={(e) => setExecAmount(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
-                  />
-                  <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">{selectedToken}</span>
+              {/* Non-gas agents: Amount per execution */}
+              {agentType !== "gas" && (
+                <div>
+                  <label className="block text-xs text-[var(--text-muted)] mb-2">Amount per Execution</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={execAmount}
+                      onChange={(e) => setExecAmount(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-[var(--bg-dark)] border border-[var(--border)] rounded-lg font-mono"
+                    />
+                    <span className="px-3 py-2 bg-[var(--bg-dark)] rounded-lg text-[var(--text-muted)]">{selectedToken}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <div className="flex justify-between mb-2">
@@ -319,18 +436,41 @@ export function SetupAgent() {
 
               {/* Execution Summary */}
               <div className="p-3 bg-blue-500/10 rounded-lg text-sm">
-                <div className="flex justify-between mb-1">
-                  <span className="text-[var(--text-muted)]">Total Executions</span>
-                  <span className="font-semibold text-blue-400">{execCycles}</span>
-                </div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-[var(--text-muted)]">Total Spend</span>
-                  <span className="font-semibold">{execTotalSpend.toFixed(4)} {selectedToken}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Ends</span>
-                  <span>{execEndDate.toLocaleDateString()}</span>
-                </div>
+                {agentType === "gas" ? (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">Trigger Threshold</span>
+                      <span className="font-semibold text-yellow-400">&lt; {triggerThreshold} ETH</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">Top Up Amount</span>
+                      <span className="font-semibold text-blue-400">{topUpAmount} ETH</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">Max Checks</span>
+                      <span className="font-semibold">{execCycles}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Monitoring Until</span>
+                      <span>{execEndDate.toLocaleDateString()}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">Total Executions</span>
+                      <span className="font-semibold text-blue-400">{execCycles}</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-[var(--text-muted)]">Total Spend</span>
+                      <span className="font-semibold">{execTotalSpend.toFixed(4)} {selectedToken}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--text-muted)]">Ends</span>
+                      <span>{execEndDate.toLocaleDateString()}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

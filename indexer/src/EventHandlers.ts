@@ -1,9 +1,9 @@
 // @ts-nocheck
 import generated from "../generated/index.js";
-const { SimpleVault } = generated;
+const { SimpleVault, YieldVault, AaveWrapper } = generated;
 
-// Handle Deposit events
-SimpleVault.Deposit.handler(async ({ event, context }) => {
+// Generic deposit handler
+const handleDeposit = async ({ event, context }: any) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultDeposit.set({
@@ -39,10 +39,10 @@ SimpleVault.Deposit.handler(async ({ event, context }) => {
       uniqueUsers: 1,
     });
   }
-});
+};
 
-// Handle Withdrawal events
-SimpleVault.Withdrawal.handler(async ({ event, context }) => {
+// Generic withdrawal handler
+const handleWithdrawal = async ({ event, context }: any) => {
   const id = `${event.chainId}-${event.transaction.hash}-${event.logIndex}`;
   
   context.VaultWithdrawal.set({
@@ -77,4 +77,16 @@ SimpleVault.Withdrawal.handler(async ({ event, context }) => {
       uniqueUsers: 1,
     });
   }
-});
+};
+
+// SimpleVault handlers
+SimpleVault.Deposit.handler(handleDeposit);
+SimpleVault.Withdrawal.handler(handleWithdrawal);
+
+// YieldVault handlers (same events, same schema)
+YieldVault.Deposit.handler(handleDeposit);
+YieldVault.Withdrawal.handler(handleWithdrawal);
+
+// AaveWrapper handlers (same events, same schema)
+AaveWrapper.Deposit.handler(handleDeposit);
+AaveWrapper.Withdrawal.handler(handleWithdrawal);

@@ -9,14 +9,30 @@ contracts:
     events:
       - event: Deposit(address indexed user, uint256 amount, uint256 timestamp)
       - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
+  - name: YieldVault
+    handler: src/EventHandlers.ts
+    events:
+      - event: Deposit(address indexed user, uint256 amount, uint256 timestamp)
+      - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
+  - name: AaveWrapper
+    handler: src/EventHandlers.ts
+    events:
+      - event: Deposit(address indexed user, uint256 amount, uint256 timestamp)
+      - event: Withdrawal(address indexed user, uint256 amount, uint256 timestamp)
 networks:
   - id: 11155111 # Sepolia
     start_block: 9940000
     contracts:
       - name: SimpleVault
         address: "0x9acec7011519F89C59d9A595f9829bBb79Ed0d4b"
+      - name: YieldVault
+        address: "0xcE338780004Ebf71Af391Eb1D5a593ef32C176D4"
+      - name: AaveWrapper
+        address: "0xdb1acDc06b6b6Fb711EC111376F410954362f9BA"
   - id: 84532 # Base Sepolia
     start_block: 22000000
     contracts:
       - name: SimpleVault
         address: "0x93fc90a3Fb7d8c15bbaF50bFCc612B26CA8E68c8"
+      - name: YieldVault
+        address: "0x78Efd0937058F3599Af03Fd496DB0eCB68d5c9Bb"
