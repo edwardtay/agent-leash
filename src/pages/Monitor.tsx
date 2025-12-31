@@ -563,11 +563,20 @@ export function Monitor() {
 
                 {/* Active Permissions for this agent */}
                 {(() => {
-                  const agentPerms = permissions.filter(p => 
-                    !p.isRevoked && 
-                    p.timeRemaining > 0 && 
-                    p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase()
-                  );
+                  // Debug: log all permissions and agents for troubleshooting
+                  console.log(`Agent ${agent.agentName} wallet: ${agent.agentWallet}`);
+                  permissions.forEach(p => {
+                    if (!p.isRevoked && p.timeRemaining > 0) {
+                      console.log(`  Permission ${p.id}: grantee=${p.granteeAddress}, stored agentWallet=${(p as any).agentWallet}`);
+                    }
+                  });
+                  
+                  const agentPerms = permissions.filter(p => {
+                    const matches = !p.isRevoked && 
+                      p.timeRemaining > 0 && 
+                      p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase();
+                    return matches;
+                  });
                   
                   if (agentPerms.length === 0) {
                     // No active permission - show extend/renew button

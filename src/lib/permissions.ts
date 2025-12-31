@@ -74,9 +74,30 @@ export function calculatePermissionHealth(
   const timeElapsed = totalDuration - timeRemaining;
 
   // Use stored agentWallet first, fallback to extracting from permission response
-  const granteeAddress = (permission as any).agentWallet || 
-    permission.permission?.[0]?.signer?.data?.address || 
-    "Unknown";
+  // The permission response structure varies - try multiple paths
+  let granteeAddress = permission.agentWallet;
+  
+  if (!granteeAddress) {
+    // Try to extract from permission response - check various structures
+    const permData = permission.permission;
+    if (Array.isArray(permData) && permData[0]) {
+      // Structure: permission: [{ signer: { data: { address } } }]
+      granteeAddress = permData[0]?.signer?.data?.address;
+    } else if (permData?.signer?.data?.address) {
+      // Structure: permission: { signer: { data: { address } } }
+      granteeAddress = permData.signer.data.address;
+    }
+  }
+  
+  // Also check config for agentWallet as another fallback (cast to any for flexibility)
+  if (!granteeAddress && (permission.config as any)?.agentWallet) {
+    granteeAddress = (permission.config as any).agentWallet;
+  }
+  
+  granteeAddress = granteeAddress || "Unknown";
+  
+  // Debug log for troubleshooting
+  console.log(`Permission health calc - agentWallet: ${permission.agentWallet}, extracted: ${granteeAddress}`);
 
   const periodsElapsed = Math.floor(timeElapsed / permission.config.periodDuration);
   const expectedSpent = periodsElapsed * parseFloat(permission.config.amountPerPeriod || "0");
