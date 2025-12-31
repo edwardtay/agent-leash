@@ -564,9 +564,9 @@ export function Monitor() {
                   </div>
                 )}
 
-                {/* Permission */}
-                <div className="p-2 bg-green-500/5 border border-green-500/30 rounded-lg text-xs">
-                  <span className="text-green-400">🔐 {agent.permission?.amount} {agent.token}/{agent.permission?.frequency}</span>
+                {/* Agent Strategy (what agent is configured to do) */}
+                <div className="p-2 bg-blue-500/5 border border-blue-500/30 rounded-lg text-xs">
+                  <span className="text-blue-400">📋 Strategy: {agent.permission?.amount} {agent.token}/{agent.permission?.frequency}</span>
                   <span className="text-[var(--text-muted)] ml-2">• {agent.permission?.type}</span>
                 </div>
 

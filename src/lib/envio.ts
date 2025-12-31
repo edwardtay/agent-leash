@@ -10,26 +10,49 @@ interface GraphQLResponse<T> {
   errors?: Array<{ message: string }>;
 }
 
-async function query<T>(queryString: string, variables?: Record<string, any>): Promise<T | null> {
-  try {
-    const response = await fetch(ENVIO_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: queryString, variables }),
-    });
+async function query<T>(queryString: string, variables?: Record<string, any>, retries = 2): Promise<T | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      
+      const response = await fetch(ENVIO_ENDPOINT, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ query: queryString, variables }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
 
-    const result: GraphQLResponse<T> = await response.json();
-    
-    if (result.errors) {
-      console.error("Envio GraphQL errors:", result.errors);
+      if (!response.ok) {
+        console.warn(`Envio response not ok: ${response.status}`);
+        if (attempt < retries) continue;
+        return null;
+      }
+
+      const result: GraphQLResponse<T> = await response.json();
+      
+      if (result.errors) {
+        console.error("Envio GraphQL errors:", result.errors);
+        return null;
+      }
+
+      return result.data || null;
+    } catch (error: any) {
+      console.warn(`Envio query attempt ${attempt + 1} failed:`, error.message);
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // Exponential backoff
+        continue;
+      }
+      console.error("Envio query error after retries:", error);
       return null;
     }
-
-    return result.data || null;
-  } catch (error) {
-    console.error("Envio query error:", error);
-    return null;
   }
+  return null;
 }
 
 /**
@@ -182,13 +205,27 @@ export async function getAggregatedStats(userAddress: string) {
  */
 export async function checkEnvioHealth(): Promise<boolean> {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    
     const response = await fetch(ENVIO_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
       body: JSON.stringify({ query: "{ __typename }" }),
+      signal: controller.signal,
     });
-    return response.ok;
-  } catch {
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    return !!data?.data?.__typename;
+  } catch (error) {
+    console.warn("Envio health check failed:", error);
     return false;
   }
 }
