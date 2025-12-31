@@ -5,10 +5,25 @@
  */
 
 import { createPublicClient, createWalletClient, http, parseEther, encodeFunctionData, type Hex } from "viem";
-import { sepolia } from "viem/chains";
+import { sepolia, baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 const SEPOLIA_RPC = import.meta.env.VITE_SEPOLIA_RPC || "https://ethereum-sepolia-rpc.publicnode.com";
+const BASE_SEPOLIA_RPC = import.meta.env.VITE_BASE_SEPOLIA_RPC || "https://sepolia.base.org";
+
+// Chain configs
+const CHAIN_CONFIG = {
+  [sepolia.id]: {
+    chain: sepolia,
+    rpc: SEPOLIA_RPC,
+    usdc: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as `0x${string}`,
+  },
+  [baseSepolia.id]: {
+    chain: baseSepolia,
+    rpc: BASE_SEPOLIA_RPC,
+    usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as `0x${string}`,
+  },
+};
 
 // Simple vault ABI for deposits
 const VAULT_ABI = [
@@ -407,21 +422,28 @@ function storeExecution(execution: {
   localStorage.setItem("leash_executions", JSON.stringify(executions));
 }
 
-export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: string; usdc: string }> {
+export async function getAgentBalance(address: `0x${string}`, chainId: number = sepolia.id): Promise<{ eth: string; usdc: string }> {
   try {
+    const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
+    
     const publicClient = createPublicClient({
-      chain: sepolia,
-      transport: http(SEPOLIA_RPC),
+      chain: config.chain,
+      transport: http(config.rpc),
     });
 
     const ethBalance = await publicClient.getBalance({ address });
     
-    const usdcBalance = await publicClient.readContract({
-      address: TOKENS.USDC,
-      abi: ERC20_ABI,
-      functionName: "balanceOf",
-      args: [address],
-    }) as bigint;
+    let usdcBalance = BigInt(0);
+    try {
+      usdcBalance = await publicClient.readContract({
+        address: config.usdc,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address],
+      }) as bigint;
+    } catch {
+      // USDC might not exist on this chain
+    }
 
     return {
       eth: (Number(ethBalance) / 1e18).toFixed(6),
@@ -436,6 +458,6 @@ export async function getAgentBalance(address: `0x${string}`): Promise<{ eth: st
 /**
  * Get user's Smart Account balance (the account that granted permission)
  */
-export async function getUserSmartAccountBalance(userAddress: `0x${string}`): Promise<{ eth: string; usdc: string }> {
-  return getAgentBalance(userAddress);
+export async function getUserSmartAccountBalance(userAddress: `0x${string}`, chainId: number = sepolia.id): Promise<{ eth: string; usdc: string }> {
+  return getAgentBalance(userAddress, chainId);
 }

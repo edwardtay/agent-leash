@@ -1,4 +1,6 @@
-import { SimpleVault } from "../generated";
+// @ts-nocheck
+import generated from "../generated/index.js";
+const { SimpleVault } = generated;
 
 // Handle Deposit events
 SimpleVault.Deposit.handler(async ({ event, context }) => {

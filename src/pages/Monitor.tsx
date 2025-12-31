@@ -94,35 +94,26 @@ export function Monitor() {
     try {
       // Get the delegation data from stored permission
       const delegation = getPermissionDelegation(originalIndex);
+      console.log("Delegation data for revoke:", delegation);
       
       if (!delegation || !delegation[0]) {
-        // No delegation data stored - fall back to local revoke
-        // This happens for permissions granted before we stored full delegation data
         revokePermissionLocal(originalIndex);
         setPermissions(getPermissionsWithHealth());
         addToast("info", "Permission marked as revoked (no on-chain data)");
         return;
       }
 
-      // Get the permissionsContext which contains the delegation info
       const permissionData = delegation[0];
       const signerMeta = permissionData.signerMeta;
-      
-      if (!signerMeta?.delegationManager) {
-        // No delegation manager - use local revoke
-        revokePermissionLocal(originalIndex);
-        setPermissions(getPermissionsWithHealth());
-        addToast("info", "Permission marked as revoked locally");
-        return;
-      }
-
-      // Get the permissionsContext which should contain the delegation
       const permissionsContext = permissionData.permissionsContext;
       
-      if (!permissionsContext) {
+      console.log("signerMeta:", signerMeta);
+      console.log("permissionsContext:", permissionsContext);
+
+      if (!signerMeta?.delegationManager || !permissionsContext) {
         revokePermissionLocal(originalIndex);
         setPermissions(getPermissionsWithHealth());
-        addToast("info", "Permission marked as revoked (no context)");
+        addToast("info", "Permission marked as revoked (no delegation manager)");
         return;
       }
 
@@ -130,12 +121,22 @@ export function Monitor() {
       const { decodeDelegations } = await import("@metamask/smart-accounts-kit/utils");
       const { DelegationManager } = await import("@metamask/delegation-abis");
       
-      const delegations = decodeDelegations(permissionsContext as `0x${string}`);
+      let delegations;
+      try {
+        delegations = decodeDelegations(permissionsContext as `0x${string}`);
+        console.log("Decoded delegations:", delegations);
+      } catch (decodeErr) {
+        console.error("Failed to decode delegations:", decodeErr);
+        revokePermissionLocal(originalIndex);
+        setPermissions(getPermissionsWithHealth());
+        addToast("info", "Permission marked as revoked (decode failed)");
+        return;
+      }
       
       if (!delegations || delegations.length === 0) {
         revokePermissionLocal(originalIndex);
         setPermissions(getPermissionsWithHealth());
-        addToast("info", "Permission marked as revoked (no delegation)");
+        addToast("info", "Permission marked as revoked (empty delegation)");
         return;
       }
 
@@ -150,6 +151,8 @@ export function Monitor() {
         signature: rawDelegation.signature,
       };
       
+      console.log("Delegation to disable:", delegationToDisable);
+      
       // Encode the disableDelegation call
       const disableCalldata = encodeFunctionData({
         abi: DelegationManager.abi,
@@ -158,14 +161,14 @@ export function Monitor() {
       });
 
       // Send transaction to disable the delegation
-      addToast("info", "Confirm in wallet to revoke permission...");
+      addToast("info", "Confirm in wallet to revoke on-chain...");
       
       const hash = await walletClient.sendTransaction({
         to: signerMeta.delegationManager as `0x${string}`,
         data: disableCalldata,
       });
 
-      addToast("success", `Permission revoked on-chain! Tx: ${hash.slice(0, 10)}...`);
+      addToast("success", `Revoked on-chain! Tx: ${hash.slice(0, 10)}...`);
       
       // Mark as revoked locally too
       revokePermissionLocal(originalIndex);
@@ -174,7 +177,6 @@ export function Monitor() {
     } catch (error: any) {
       console.error("Revoke error:", error);
       
-      // If user rejected or other error, offer local revoke
       if (error.message?.includes("rejected") || error.message?.includes("denied")) {
         addToast("error", "Transaction rejected");
       } else {
@@ -214,7 +216,7 @@ export function Monitor() {
     
     // Fetch user's wallet balance (where funds come from)
     if (userAddress) {
-      getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
     }
 
     setPermissions(getPermissionsWithHealth());
@@ -223,6 +225,17 @@ export function Monitor() {
       if (ok) getVaultDeposits(10).then(setIndexedDeposits);
     });
   }, [userAddress]);
+
+  // Refresh balance when chain changes
+  useEffect(() => {
+    if (userAddress && chainId) {
+      console.log("Fetching balance for chain:", chainId);
+      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(balance => {
+        console.log("Balance:", balance);
+        setUserBalance(balance);
+      });
+    }
+  }, [userAddress, chainId]);
 
   // Auto-refresh deposits every 3 seconds when Envio is online
   useEffect(() => {
@@ -251,7 +264,7 @@ export function Monitor() {
         addToast("success", `Deposited 0.0001 ETH to vault`);
         // Refresh user balance (funds come from user's account)
         if (userAddress) {
-          getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+          getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
         }
         setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
       } else {
@@ -451,9 +464,9 @@ export function Monitor() {
                         onClick={() => handleMultiChainExecute(agent)}
                         disabled={isMultiExecuting || parseFloat(userBalance.eth) < 0.0002}
                         className="px-2 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg disabled:opacity-50 hover:bg-purple-500/30"
-                        title="Execute on both Sepolia & Base"
+                        title="Execute on all chains"
                       >
-                        {isMultiExecuting ? "⏳" : "🌐 Multi"}
+                        {isMultiExecuting ? "⏳" : "🌐 All Chains"}
                       </button>
                     )}
                     <button
@@ -578,22 +591,40 @@ export function Monitor() {
                 ) : (
                   <div className="max-h-[60vh] overflow-y-auto">
                     {indexedDeposits.map((d) => {
-                      const timestamp = d.timestamp ? new Date(d.timestamp).getTime() : Date.now();
-                      const secondsAgo = Math.floor((Date.now() - timestamp) / 1000);
-                      const timeAgo = secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                      // timestamp from Envio is BigInt unix timestamp in seconds
+                      let timestampMs = Date.now();
+                      if (d.timestamp) {
+                        const ts = typeof d.timestamp === 'string' ? parseInt(d.timestamp) : Number(d.timestamp);
+                        if (!isNaN(ts) && ts > 0) {
+                          timestampMs = ts * 1000;
+                        }
+                      }
+                      const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
+                      const timeAgo = isNaN(secondsAgo) || secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                      
+                      // Chain logos
+                      const isSepolia = d.chainId === 11155111;
+                      const chainLogo = isSepolia 
+                        ? "https://cryptologos.cc/logos/ethereum-eth-logo.svg" 
+                        : "https://raw.githubusercontent.com/base-org/brand-kit/main/logo/symbol/Base_Symbol_Blue.svg";
+                      const chainName = isSepolia ? "Sepolia" : "Base";
+                      const chainColor = isSepolia ? "blue" : "purple";
                       
                       return (
                         <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${d.chainId === 11155111 ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
-                              {d.chainId === 11155111 ? "Sepolia" : "Base"}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <img src={chainLogo} alt={chainName} className="w-4 h-4" />
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-${chainColor}-500/20 text-${chainColor}-400`}>
+                                {chainName}
+                              </span>
+                            </div>
                             <span className="text-[10px] text-[var(--text-muted)]">{timeAgo}</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-sm font-medium">{(Number(d.amount) / 1e18).toFixed(4)} ETH</span>
                             <a
-                              href={`${d.chainId === 11155111 ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
+                              href={`${isSepolia ? "https://sepolia.etherscan.io" : "https://sepolia.basescan.org"}/tx/${d.txHash}`}
                               target="_blank"
                               className="text-[10px] text-[var(--primary)] hover:underline"
                             >

@@ -27,3 +27,14 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Private files (demo scripts, deploy scripts with keys)
+private/
+
+# Foundry
+cache/
+out/
+
+# Indexer generated files (regenerated on build)
+indexer/generated/
+indexer/node_modules/
