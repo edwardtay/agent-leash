@@ -578,9 +578,10 @@ export function Monitor() {
                 ) : (
                   <div className="max-h-[60vh] overflow-y-auto">
                     {indexedDeposits.map((d) => {
-                      const timestamp = d.timestamp ? new Date(d.timestamp).getTime() : Date.now();
-                      const secondsAgo = Math.floor((Date.now() - timestamp) / 1000);
-                      const timeAgo = secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                      // timestamp from Envio is BigInt unix timestamp in seconds
+                      const timestampMs = d.timestamp ? Number(d.timestamp) * 1000 : Date.now();
+                      const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
+                      const timeAgo = secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
                       
                       return (
                         <div key={d.id} className="p-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-dark)]/50">
