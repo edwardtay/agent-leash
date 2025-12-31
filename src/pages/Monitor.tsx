@@ -13,8 +13,7 @@ import {
   type PermissionWithHealth,
 } from "../lib/permissions";
 import { 
-  executeVaultDeposit,
-  getUserSmartAccountBalance
+  executeVaultDeposit
 } from "../lib/agent";
 import { checkEnvioHealth, getVaultDeposits, type VaultDeposit } from "../lib/envio";
 import { AddressDisplay } from "../components/AddressDisplay";
@@ -53,7 +52,6 @@ export function Monitor() {
   
   const [agents, setAgents] = useState<AgentSetup[]>([]);
   const [permissions, setPermissions] = useState<PermissionWithHealth[]>([]);
-  const [userBalance, setUserBalance] = useState({ eth: "0", usdc: "0" });
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<any>(null);
@@ -213,11 +211,6 @@ export function Monitor() {
     // Load auto-execute settings
     const autoExec = JSON.parse(localStorage.getItem("leash_auto_execute") || "{}");
     setAutoExecuteEnabled(autoExec);
-    
-    // Fetch user's wallet balance (where funds come from)
-    if (userAddress) {
-      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
-    }
 
     setPermissions(getPermissionsWithHealth());
     setPermissionAlerts(getPermissionAlerts());
@@ -227,17 +220,6 @@ export function Monitor() {
       if (ok) getVaultDeposits(10).then(setIndexedDeposits);
     });
   }, [userAddress]);
-
-  // Refresh balance when chain changes
-  useEffect(() => {
-    if (userAddress && chainId) {
-      console.log("Fetching balance for chain:", chainId);
-      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(balance => {
-        console.log("Balance:", balance);
-        setUserBalance(balance);
-      });
-    }
-  }, [userAddress, chainId]);
 
   // Auto-refresh deposits every 3 seconds when Envio is online
   useEffect(() => {
@@ -324,10 +306,6 @@ export function Monitor() {
       
       if (result.success) {
         addToast("success", `Deposited 0.0001 ETH to vault`);
-        // Refresh user balance (funds come from user's account)
-        if (userAddress) {
-          getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
-        }
         // Refresh permissions to update utilization
         setPermissions(getPermissionsWithHealth());
         setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
@@ -439,28 +417,6 @@ export function Monitor() {
           {/* Left Column - Main Content */}
           <div className="lg:col-span-2 space-y-6">
 
-        {/* User's Wallet Balance */}
-        <div className="p-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)]">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💰</span>
-            <span className="text-sm font-medium">Your Wallet</span>
-            <span className="text-[10px] px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded">Funds Source</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div>
-              <span className="text-[10px] text-[var(--text-muted)]">ETH Balance</span>
-              <p className="text-lg font-semibold">{userBalance.eth} ETH</p>
-            </div>
-            <div>
-              <span className="text-[10px] text-[var(--text-muted)]">USDC Balance</span>
-              <p className="text-lg font-semibold">{userBalance.usdc} USDC</p>
-            </div>
-          </div>
-          <p className="text-[10px] text-[var(--text-muted)] mt-2">
-            Agents execute via ERC-7715 permissions. Funds come from your wallet.
-          </p>
-        </div>
-
         {/* All Agents */}
         <div className="space-y-4">
           {agents.map((agent) => {
@@ -526,7 +482,7 @@ export function Monitor() {
                     </button>
                     <button
                       onClick={() => handleExecute(agent)}
-                      disabled={isThisExecuting || parseFloat(userBalance.eth) < 0.0001}
+                      disabled={isThisExecuting}
                       className="px-3 py-1.5 bg-[var(--primary)] text-white text-sm rounded-lg disabled:opacity-50 flex items-center gap-1"
                     >
                       {isThisExecuting ? (

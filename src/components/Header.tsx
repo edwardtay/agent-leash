@@ -1,8 +1,21 @@
 import { Link, useLocation } from "react-router-dom";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useChainId } from "wagmi";
+import { useEffect, useState } from "react";
+import { getUserSmartAccountBalance } from "../lib/agent";
 
 export function Header() {
   const { pathname } = useLocation();
+  const { address } = useAccount();
+  const chainId = useChainId();
+  const [balance, setBalance] = useState({ eth: "0", usdc: "0" });
+
+  // Fetch balance when address or chain changes
+  useEffect(() => {
+    if (address && chainId) {
+      getUserSmartAccountBalance(address as `0x${string}`, chainId).then(setBalance);
+    }
+  }, [address, chainId]);
 
   const steps = [
     { path: "/setup", label: "Setup", icon: "🤖" },
@@ -76,8 +89,11 @@ export function Header() {
                         </button>
                         <button
                           onClick={openAccountModal}
-                          className="flex items-center gap-1.5 px-2 py-1.5 bg-[var(--bg-dark)] rounded-lg border border-[var(--border)] hover:border-[var(--primary)] transition-colors"
+                          className="flex items-center gap-2 px-2 py-1.5 bg-[var(--bg-dark)] rounded-lg border border-[var(--border)] hover:border-[var(--primary)] transition-colors"
                         >
+                          <div className="text-right hidden sm:block">
+                            <p className="text-[10px] text-[var(--primary)] font-medium">{balance.eth} ETH</p>
+                          </div>
                           <span className="text-xs font-medium">{account.displayName}</span>
                         </button>
                       </div>
