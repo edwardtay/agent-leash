@@ -75,11 +75,16 @@ export async function executeVaultDeposit(
   agentPrivateKey: `0x${string}`,
   vaultAddress: `0x${string}`,
   amount: string,
-  agentWallet?: string
+  agentWallet?: string,
+  chainId: number = sepolia.id
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
   const account = privateKeyToAccount(agentPrivateKey);
   const agentAddr = agentWallet || account.address;
+
+  // Get chain config - default to sepolia if unknown chain
+  const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
+  console.log(`Executing on chain ${chainId} (${config.chain.name})`);
 
   try {
     const storedPerm = getLatestPermission();
@@ -96,18 +101,18 @@ export async function executeVaultDeposit(
     const delegationManager = permissionResponse.signerMeta?.delegationManager as Hex;
 
     if (!permissionsContext || !delegationManager) {
-      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr);
+      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr, chainId);
     }
 
-    const walletClient = createWalletClient({ account, chain: sepolia, transport: http(SEPOLIA_RPC) });
-    const publicClient = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) });
+    const walletClient = createWalletClient({ account, chain: config.chain, transport: http(config.rpc) });
+    const publicClient = createPublicClient({ chain: config.chain, transport: http(config.rpc) });
 
     const { erc7710WalletActions } = await import("@metamask/smart-accounts-kit/actions");
     const extendedClient = walletClient.extend(erc7710WalletActions());
 
     const txHash = await extendedClient.sendTransactionWithDelegation({
       account,
-      chain: sepolia,
+      chain: config.chain,
       to: vaultAddress,
       value: parseEther(amount),
       data: encodeFunctionData({ abi: VAULT_ABI, functionName: "deposit" }),
@@ -120,13 +125,13 @@ export async function executeVaultDeposit(
     storeExecution({
       hash: txHash, timestamp, amount, token: "ETH", action: "vault-deposit",
       recipient: vaultAddress, status: receipt.status === "success" ? "success" : "failed",
-      usedPermission: true, agentWallet: agentAddr,
+      usedPermission: true, agentWallet: agentAddr, chainId,
     });
 
     return { success: receipt.status === "success", txHash, timestamp, amount, action: "vault-deposit" };
   } catch (error: any) {
     if (error.message?.includes("delegation") || error.message?.includes("permission") || error.message?.includes("revert")) {
-      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr);
+      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr, chainId);
     }
     return { success: false, error: error.message || "Vault deposit failed", timestamp, amount, action: "vault-deposit" };
   }
@@ -136,7 +141,8 @@ async function executeVaultDepositDirect(
   agentPrivateKey: `0x${string}`,
   vaultAddress: `0x${string}`,
   amount: string,
-  agentWallet?: string
+  agentWallet?: string,
+  chainId: number = sepolia.id
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
 
@@ -144,8 +150,11 @@ async function executeVaultDepositDirect(
     const account = privateKeyToAccount(agentPrivateKey);
     const agentAddr = agentWallet || account.address;
     
-    const walletClient = createWalletClient({ account, chain: sepolia, transport: http(SEPOLIA_RPC) });
-    const publicClient = createPublicClient({ chain: sepolia, transport: http(SEPOLIA_RPC) });
+    // Get chain config
+    const config = CHAIN_CONFIG[chainId] || CHAIN_CONFIG[sepolia.id];
+    
+    const walletClient = createWalletClient({ account, chain: config.chain, transport: http(config.rpc) });
+    const publicClient = createPublicClient({ chain: config.chain, transport: http(config.rpc) });
 
     const txHash = await walletClient.sendTransaction({
       to: vaultAddress,
@@ -158,7 +167,7 @@ async function executeVaultDepositDirect(
     storeExecution({
       hash: txHash, timestamp, amount, token: "ETH", action: "vault-deposit-direct",
       recipient: vaultAddress, status: receipt.status === "success" ? "success" : "failed",
-      usedPermission: false, agentWallet: agentAddr,
+      usedPermission: false, agentWallet: agentAddr, chainId,
     });
 
     return { success: receipt.status === "success", txHash, timestamp, amount, action: "vault-deposit" };

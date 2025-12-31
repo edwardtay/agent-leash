@@ -318,7 +318,7 @@ export function Monitor() {
     setIsExecuting(agent.agentWallet);
     try {
       const vaultAddress = agent.recipient || getVaultAddress(chainId) || "0x000000000000000000000000000000000000dEaD";
-      const result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, "0.0001", agent.agentWallet);
+      const result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, "0.0001", agent.agentWallet, chainId);
       setLastExecution({ ...result, agentWallet: agent.agentWallet });
       
       // Update execution count
