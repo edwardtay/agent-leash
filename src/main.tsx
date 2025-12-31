@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { config } from "./config/wagmi";
-import { SessionAccountProvider } from "./providers/SessionAccountProvider";
 import App from "./App";
 import "./index.css";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -23,11 +22,9 @@ createRoot(document.getElementById("root")!).render(
             borderRadius: "medium",
           })}
         >
-          <SessionAccountProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </SessionAccountProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

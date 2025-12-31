@@ -244,6 +244,7 @@ export function Monitor() {
   }, [envioStatus]);
 
   // Auto-execute scheduler (client-side, runs when app is open)
+  // Only runs if: auto-execute enabled, has permission, and not already executing
   useEffect(() => {
     const enabledAgents = agents.filter(a => autoExecuteEnabled[a.agentWallet]);
     if (enabledAgents.length === 0) return;
@@ -251,6 +252,17 @@ export function Monitor() {
     const checkAndExecute = async () => {
       for (const agent of enabledAgents) {
         if (isExecuting) continue; // Skip if already executing
+        
+        // Check if agent has active permission
+        const agentPerms = permissions.filter(p => 
+          !p.isRevoked && 
+          p.timeRemaining > 0 && 
+          p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase()
+        );
+        if (agentPerms.length === 0) {
+          console.log(`Skipping auto-execute for ${agent.agentName}: no active permission`);
+          continue;
+        }
         
         // Check if it's time to execute based on frequency
         const freqSeconds: Record<string, number> = { hourly: 3600, daily: 86400, weekly: 604800 };
@@ -269,17 +281,17 @@ export function Monitor() {
         if (timeSinceLastExec >= periodSec) {
           console.log(`Auto-executing for ${agent.agentName}...`);
           await handleExecute(agent);
+          // Only execute one agent per cycle to avoid spam
+          break;
         }
       }
     };
 
-    // Check every minute
-    const interval = setInterval(checkAndExecute, 60000);
-    // Also check immediately on mount
-    checkAndExecute();
+    // Check every 5 minutes (not every minute - too aggressive)
+    const interval = setInterval(checkAndExecute, 300000);
     
     return () => clearInterval(interval);
-  }, [agents, autoExecuteEnabled, isExecuting]);
+  }, [agents, autoExecuteEnabled, isExecuting, permissions]);
 
   // Toggle auto-execute for an agent
   const toggleAutoExecute = (agentWallet: string) => {
