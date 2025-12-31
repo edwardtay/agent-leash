@@ -60,7 +60,10 @@ export function calculatePermissionHealth(
   const totalDuration = permission.expiry - permission.createdAt;
   const timeElapsed = totalDuration - timeRemaining;
 
-  const granteeAddress = permission.permission?.[0]?.signer?.data?.address || "Unknown";
+  // Use stored agentWallet first, fallback to extracting from permission response
+  const granteeAddress = (permission as any).agentWallet || 
+    permission.permission?.[0]?.signer?.data?.address || 
+    "Unknown";
 
   const periodsElapsed = Math.floor(timeElapsed / permission.config.periodDuration);
   const expectedSpent = periodsElapsed * parseFloat(permission.config.amountPerPeriod || "0");

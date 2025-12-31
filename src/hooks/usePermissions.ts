@@ -184,11 +184,12 @@ export const usePermissions = () => {
         console.log("Permission response:", JSON.stringify(permission, null, 2));
         setGrantedPermissions(permission);
 
-        // Store permission in localStorage
+        // Store permission in localStorage with agent wallet
         const storedPermissions = JSON.parse(localStorage.getItem("leash_permissions") || "[]");
         storedPermissions.push({
           permission,
           config,
+          agentWallet: agentAddress, // Store agent wallet explicitly
           createdAt: currentTime,
           expiry,
         });

@@ -466,11 +466,14 @@ export function Monitor() {
                     p.timeRemaining > 0 && 
                     p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase()
                   );
+                  
                   if (agentPerms.length === 0) return null;
                   return (
                     <div className="mt-2 p-2 bg-purple-500/5 border border-purple-500/30 rounded-lg">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-purple-400 font-medium">Active Permissions ({agentPerms.length})</span>
+                        <span className="text-[10px] text-purple-400 font-medium">
+                          Active Permissions ({agentPerms.length})
+                        </span>
                       </div>
                       {agentPerms.map((p) => {
                         const originalIndex = permissions.findIndex(perm => perm.id === p.id);
@@ -512,6 +515,43 @@ export function Monitor() {
             );
           })}
         </div>
+
+        {/* Unassigned Permissions (legacy - no agentWallet stored) */}
+        {(() => {
+          const assignedWallets = agents.map(a => a.agentWallet.toLowerCase());
+          const unassignedPerms = permissions.filter(p => 
+            !p.isRevoked && 
+            p.timeRemaining > 0 && 
+            !assignedWallets.includes(p.granteeAddress.toLowerCase())
+          );
+          if (unassignedPerms.length === 0) return null;
+          return (
+            <div className="mt-4 p-4 bg-yellow-500/5 border border-yellow-500/30 rounded-xl">
+              <h3 className="text-sm font-medium text-yellow-400 mb-2">⚠️ Unassigned Permissions ({unassignedPerms.length})</h3>
+              <p className="text-[10px] text-[var(--text-muted)] mb-2">These permissions were granted before agent tracking was added</p>
+              {unassignedPerms.map((p) => {
+                const originalIndex = permissions.findIndex(perm => perm.id === p.id);
+                const isThisRevoking = isRevoking === p.id;
+                return (
+                  <div key={p.id} className="flex items-center justify-between py-2 border-t border-yellow-500/20">
+                    <div>
+                      <span className="text-xs">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] ml-2">{formatTimeRemaining(p.timeRemaining)} left</span>
+                      <span className="text-[10px] text-yellow-400 ml-2">→ {p.granteeAddress.slice(0, 6)}...{p.granteeAddress.slice(-4)}</span>
+                    </div>
+                    <button 
+                      onClick={() => handleRevokePermission(p.id, originalIndex)} 
+                      disabled={isThisRevoking}
+                      className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
+                    >
+                      {isThisRevoking ? "⏳" : "Revoke"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
           </div>
 
           {/* Right Column - Live Activity */}
