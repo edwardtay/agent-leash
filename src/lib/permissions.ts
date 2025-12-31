@@ -12,6 +12,7 @@ export interface StoredPermission {
     durationDays: number;
     permissionType?: "periodic" | "stream";
   };
+  agentWallet?: string;
   createdAt: number;
   expiry: number;
   isRevoked?: boolean;
@@ -22,6 +23,16 @@ export interface StoredExecution {
   hash: string;
   timestamp: number;
   amount: string;
+  recipient?: string;
+  agentWallet?: string;
+}
+
+export interface PeriodUtilization {
+  periodStart: number;
+  periodEnd: number;
+  used: number;
+  allowed: number;
+  percentage: number;
 }
 
 export interface PermissionWithHealth extends StoredPermission {
@@ -33,6 +44,8 @@ export interface PermissionWithHealth extends StoredPermission {
   executionCount: number;
   totalExecuted: number;
   granteeAddress: string;
+  currentPeriod: PeriodUtilization;
+  expiryWarning: "none" | "week" | "day" | "critical";
 }
 
 export function getPermissions(): StoredPermission[] {
@@ -68,13 +81,50 @@ export function calculatePermissionHealth(
   const periodsElapsed = Math.floor(timeElapsed / permission.config.periodDuration);
   const expectedSpent = periodsElapsed * parseFloat(permission.config.amountPerPeriod || "0");
 
+  // Filter executions for this specific permission/agent
   const permissionExecutions = executions.filter(
-    (e) => e.timestamp >= permission.createdAt * 1000 && e.timestamp <= permission.expiry * 1000
+    (e) => {
+      const inTimeRange = e.timestamp >= permission.createdAt * 1000 && e.timestamp <= permission.expiry * 1000;
+      const matchesAgent = !e.agentWallet || e.agentWallet.toLowerCase() === granteeAddress.toLowerCase();
+      return inTimeRange && matchesAgent;
+    }
   );
   const executionCount = permissionExecutions.length;
   const totalExecuted = permissionExecutions.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   const utilizationRate = expectedSpent > 0 ? (totalExecuted / expectedSpent) * 100 : 0;
+
+  // Calculate current period utilization
+  const periodDuration = permission.config.periodDuration;
+  const currentPeriodIndex = Math.floor(timeElapsed / periodDuration);
+  const currentPeriodStart = permission.createdAt + (currentPeriodIndex * periodDuration);
+  const currentPeriodEnd = currentPeriodStart + periodDuration;
+  const allowedPerPeriod = parseFloat(permission.config.amountPerPeriod || "0");
+  
+  const currentPeriodExecutions = permissionExecutions.filter(
+    (e) => e.timestamp >= currentPeriodStart * 1000 && e.timestamp < currentPeriodEnd * 1000
+  );
+  const usedThisPeriod = currentPeriodExecutions.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  
+  const currentPeriod: PeriodUtilization = {
+    periodStart: currentPeriodStart,
+    periodEnd: currentPeriodEnd,
+    used: usedThisPeriod,
+    allowed: allowedPerPeriod,
+    percentage: allowedPerPeriod > 0 ? (usedThisPeriod / allowedPerPeriod) * 100 : 0,
+  };
+
+  // Expiry warning levels
+  let expiryWarning: "none" | "week" | "day" | "critical" = "none";
+  if (timeRemaining <= 0) {
+    expiryWarning = "critical";
+  } else if (timeRemaining < 86400) { // < 1 day
+    expiryWarning = "critical";
+  } else if (timeRemaining < 86400 * 2) { // < 2 days
+    expiryWarning = "day";
+  } else if (timeRemaining < 86400 * 7) { // < 7 days
+    expiryWarning = "week";
+  }
 
   let status: PermissionWithHealth["status"];
   if (permission.isRevoked) {
@@ -108,6 +158,8 @@ export function calculatePermissionHealth(
     executionCount,
     totalExecuted,
     granteeAddress,
+    currentPeriod,
+    expiryWarning,
   };
 }
 
@@ -188,6 +240,50 @@ export function getPermissionDelegation(index: number): any | null {
 
 // Legacy alias
 export const revokePermission = revokePermissionLocal;
+
+/**
+ * Get executions for a specific agent
+ */
+export function getAgentExecutions(agentWallet: string): StoredExecution[] {
+  const executions = getExecutions();
+  return executions.filter(
+    (e) => e.agentWallet?.toLowerCase() === agentWallet.toLowerCase()
+  );
+}
+
+/**
+ * Get permissions that are expiring soon (within days)
+ */
+export function getExpiringPermissions(withinDays: number = 7): PermissionWithHealth[] {
+  const permissions = getPermissionsWithHealth();
+  const now = Math.floor(Date.now() / 1000);
+  const threshold = withinDays * 86400;
+  
+  return permissions.filter(
+    (p) => !p.isRevoked && p.timeRemaining > 0 && p.timeRemaining < threshold
+  );
+}
+
+/**
+ * Check if any permissions need attention (expiring or over-utilized)
+ */
+export function getPermissionAlerts(): { type: "expiring" | "overused"; permission: PermissionWithHealth }[] {
+  const permissions = getPermissionsWithHealth();
+  const alerts: { type: "expiring" | "overused"; permission: PermissionWithHealth }[] = [];
+  
+  permissions.forEach((p) => {
+    if (p.isRevoked || p.timeRemaining <= 0) return;
+    
+    if (p.expiryWarning === "critical" || p.expiryWarning === "day") {
+      alerts.push({ type: "expiring", permission: p });
+    }
+    if (p.currentPeriod.percentage > 90) {
+      alerts.push({ type: "overused", permission: p });
+    }
+  });
+  
+  return alerts;
+}
 
 export function formatTimeRemaining(seconds: number): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;

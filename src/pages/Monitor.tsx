@@ -8,7 +8,8 @@ import {
   revokePermissionLocal,
   getPermissionDelegation,
   formatTimeRemaining,
-  getExecutions,
+  getAgentExecutions,
+  getPermissionAlerts,
   type PermissionWithHealth,
 } from "../lib/permissions";
 import { 
@@ -60,6 +61,8 @@ export function Monitor() {
   const [showExportKey, setShowExportKey] = useState<string | null>(null);
   const [indexedDeposits, setIndexedDeposits] = useState<VaultDeposit[]>([]);
   const [executionCounts, setExecutionCounts] = useState<Record<string, number>>({});
+  const [permissionAlerts, setPermissionAlerts] = useState<{ type: "expiring" | "overused"; permission: PermissionWithHealth }[]>([]);
+  const [autoExecuteEnabled, setAutoExecuteEnabled] = useState<Record<string, boolean>>({});
   const { address: userAddress } = useAccount();
 
   // Calculate stats from indexed deposits
@@ -199,13 +202,17 @@ export function Monitor() {
     
     setAgents(storedAgents);
     
-    // Count executions per agent
-    const executions = getExecutions();
+    // Count executions per agent (using agent-specific filter)
     const counts: Record<string, number> = {};
     storedAgents.forEach((agent: AgentSetup) => {
-      counts[agent.agentWallet] = executions.filter((e: any) => e.recipient === agent.recipient).length;
+      const agentExecs = getAgentExecutions(agent.agentWallet);
+      counts[agent.agentWallet] = agentExecs.length;
     });
     setExecutionCounts(counts);
+    
+    // Load auto-execute settings
+    const autoExec = JSON.parse(localStorage.getItem("leash_auto_execute") || "{}");
+    setAutoExecuteEnabled(autoExec);
     
     // Fetch user's wallet balance (where funds come from)
     if (userAddress) {
@@ -213,6 +220,8 @@ export function Monitor() {
     }
 
     setPermissions(getPermissionsWithHealth());
+    setPermissionAlerts(getPermissionAlerts());
+    
     checkEnvioHealth().then(ok => {
       setEnvioStatus(ok ? "online" : "offline");
       if (ok) getVaultDeposits(10).then(setIndexedDeposits);
@@ -241,6 +250,59 @@ export function Monitor() {
     return () => clearInterval(interval);
   }, [envioStatus]);
 
+  // Auto-execute scheduler (client-side, runs when app is open)
+  useEffect(() => {
+    const enabledAgents = agents.filter(a => autoExecuteEnabled[a.agentWallet]);
+    if (enabledAgents.length === 0) return;
+
+    const checkAndExecute = async () => {
+      for (const agent of enabledAgents) {
+        if (isExecuting) continue; // Skip if already executing
+        
+        // Check if it's time to execute based on frequency
+        const freqSeconds: Record<string, number> = { hourly: 3600, daily: 86400, weekly: 604800 };
+        const freq = agent.permission?.frequency || "daily";
+        const periodSec = freqSeconds[freq] || 86400;
+        
+        // Get last execution for this agent
+        const agentExecs = getAgentExecutions(agent.agentWallet);
+        const lastExec = agentExecs.length > 0 
+          ? Math.max(...agentExecs.map(e => e.timestamp))
+          : 0;
+        
+        const timeSinceLastExec = (Date.now() - lastExec) / 1000;
+        
+        // Execute if enough time has passed since last execution
+        if (timeSinceLastExec >= periodSec) {
+          console.log(`Auto-executing for ${agent.agentName}...`);
+          await handleExecute(agent);
+        }
+      }
+    };
+
+    // Check every minute
+    const interval = setInterval(checkAndExecute, 60000);
+    // Also check immediately on mount
+    checkAndExecute();
+    
+    return () => clearInterval(interval);
+  }, [agents, autoExecuteEnabled, isExecuting]);
+
+  // Toggle auto-execute for an agent
+  const toggleAutoExecute = (agentWallet: string) => {
+    const newState = { ...autoExecuteEnabled, [agentWallet]: !autoExecuteEnabled[agentWallet] };
+    setAutoExecuteEnabled(newState);
+    localStorage.setItem("leash_auto_execute", JSON.stringify(newState));
+    addToast("info", newState[agentWallet] ? "Auto-execute enabled" : "Auto-execute disabled");
+  };
+
+  // Handle extend permission - navigate to grant with pre-filled data
+  const handleExtendPermission = (agent: AgentSetup) => {
+    // Store agent setup for grant page
+    localStorage.setItem("leash_agent_setup", JSON.stringify(agent));
+    navigate("/grant");
+  };
+
   const handleExecute = async (agent: AgentSetup) => {
     const privateKey = agent.agentPrivateKey as `0x${string}`;
     if (!privateKey) {
@@ -251,14 +313,23 @@ export function Monitor() {
     setIsExecuting(agent.agentWallet);
     try {
       const vaultAddress = agent.recipient || getVaultAddress(chainId) || "0x000000000000000000000000000000000000dEaD";
-      const result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, "0.0001");
+      const result = await executeVaultDeposit(privateKey, vaultAddress as `0x${string}`, "0.0001", agent.agentWallet);
       setLastExecution({ ...result, agentWallet: agent.agentWallet });
+      
+      // Update execution count
+      setExecutionCounts(prev => ({
+        ...prev,
+        [agent.agentWallet]: (prev[agent.agentWallet] || 0) + 1
+      }));
+      
       if (result.success) {
         addToast("success", `Deposited 0.0001 ETH to vault`);
         // Refresh user balance (funds come from user's account)
         if (userAddress) {
           getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
         }
+        // Refresh permissions to update utilization
+        setPermissions(getPermissionsWithHealth());
         setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
       } else {
         addToast("error", result.error || "Execution failed");
@@ -335,6 +406,34 @@ export function Monitor() {
           </div>
         )}
 
+        {/* Permission Alerts Banner */}
+        {permissionAlerts.length > 0 && (
+          <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">⚠️</span>
+              <span className="font-medium text-orange-400">Attention Required</span>
+            </div>
+            <div className="space-y-2">
+              {permissionAlerts.slice(0, 3).map((alert, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-[var(--text-muted)]">
+                    {alert.type === "expiring" 
+                      ? `🕐 Permission expiring: ${formatTimeRemaining(alert.permission.timeRemaining)} left`
+                      : `📊 High utilization: ${alert.permission.currentPeriod.percentage.toFixed(0)}% used this period`
+                    }
+                  </span>
+                  <span className="text-xs text-orange-400">
+                    {alert.permission.granteeAddress.slice(0, 6)}...
+                  </span>
+                </div>
+              ))}
+              {permissionAlerts.length > 3 && (
+                <p className="text-xs text-[var(--text-muted)]">+{permissionAlerts.length - 3} more alerts</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
@@ -406,6 +505,18 @@ export function Monitor() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Auto-execute toggle */}
+                    <button
+                      onClick={() => toggleAutoExecute(agent.agentWallet)}
+                      className={`px-2 py-1.5 rounded-lg text-xs flex items-center gap-1 ${
+                        autoExecuteEnabled[agent.agentWallet] 
+                          ? "bg-green-500/20 text-green-400" 
+                          : "bg-[var(--bg-dark)] text-[var(--text-muted)]"
+                      }`}
+                      title={autoExecuteEnabled[agent.agentWallet] ? "Auto-execute ON" : "Auto-execute OFF"}
+                    >
+                      {autoExecuteEnabled[agent.agentWallet] ? "🔄 Auto" : "⏸️ Manual"}
+                    </button>
                     <button
                       onClick={() => handleDeleteAgent(agent.agentWallet)}
                       className="px-2 py-1.5 text-red-400 hover:bg-red-500/10 rounded-lg text-xs"
@@ -467,7 +578,22 @@ export function Monitor() {
                     p.granteeAddress.toLowerCase() === agent.agentWallet.toLowerCase()
                   );
                   
-                  if (agentPerms.length === 0) return null;
+                  if (agentPerms.length === 0) {
+                    // No active permission - show extend/renew button
+                    return (
+                      <div className="mt-2 p-2 bg-yellow-500/5 border border-yellow-500/30 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-yellow-400">⚠️ No active permission</span>
+                          <button 
+                            onClick={() => handleExtendPermission(agent)}
+                            className="px-2 py-0.5 text-[10px] bg-[var(--primary)] text-white rounded"
+                          >
+                            Grant Permission
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div className="mt-2 p-2 bg-purple-500/5 border border-purple-500/30 rounded-lg">
                       <div className="flex items-center justify-between mb-1">
@@ -478,19 +604,58 @@ export function Monitor() {
                       {agentPerms.map((p) => {
                         const originalIndex = permissions.findIndex(perm => perm.id === p.id);
                         const isThisRevoking = isRevoking === p.id;
+                        const utilizationPct = p.currentPeriod.percentage;
+                        const isExpiringSoon = p.expiryWarning !== "none";
+                        
                         return (
-                          <div key={p.id} className="flex items-center justify-between py-1 border-t border-purple-500/20 first:border-0">
-                            <div>
-                              <span className="text-xs">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</span>
-                              <span className="text-[10px] text-[var(--text-muted)] ml-2">{formatTimeRemaining(p.timeRemaining)} left</span>
+                          <div key={p.id} className="py-1 border-t border-purple-500/20 first:border-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs">{p.config.amountPerPeriod} {p.config.token}/{p.config.periodDuration === 86400 ? "day" : "hr"}</span>
+                                <span className="text-[10px] text-[var(--text-muted)]">{formatTimeRemaining(p.timeRemaining)} left</span>
+                                {isExpiringSoon && (
+                                  <span className={`text-[10px] px-1 py-0.5 rounded ${
+                                    p.expiryWarning === "critical" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"
+                                  }`}>
+                                    {p.expiryWarning === "critical" ? "⚠️ Expiring!" : "🕐 Soon"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {isExpiringSoon && (
+                                  <button 
+                                    onClick={() => handleExtendPermission(agent)}
+                                    className="px-2 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded"
+                                  >
+                                    Extend
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => handleRevokePermission(p.id, originalIndex)} 
+                                  disabled={isThisRevoking}
+                                  className="px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
+                                >
+                                  {isThisRevoking ? "⏳" : "Revoke"}
+                                </button>
+                              </div>
                             </div>
-                            <button 
-                              onClick={() => handleRevokePermission(p.id, originalIndex)} 
-                              disabled={isThisRevoking}
-                              className="px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded disabled:opacity-50"
-                            >
-                              {isThisRevoking ? "⏳" : "Revoke"}
-                            </button>
+                            {/* Utilization bar */}
+                            <div className="mt-1">
+                              <div className="flex items-center justify-between text-[10px] mb-0.5">
+                                <span className="text-[var(--text-muted)]">This period</span>
+                                <span className={utilizationPct > 90 ? "text-red-400" : utilizationPct > 70 ? "text-yellow-400" : "text-green-400"}>
+                                  {p.currentPeriod.used.toFixed(4)} / {p.currentPeriod.allowed} {p.config.token} ({utilizationPct.toFixed(0)}%)
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-[var(--bg-dark)] rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all ${
+                                    utilizationPct > 90 ? "bg-red-500" : utilizationPct > 70 ? "bg-yellow-500" : "bg-green-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, utilizationPct)}%` }}
+                                />
+                              </div>
+                            </div>
                           </div>
                         );
                       })}

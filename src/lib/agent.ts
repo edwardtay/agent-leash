@@ -102,9 +102,12 @@ function getLatestPermission(): StoredPermission | null {
 export async function executeVaultDeposit(
   agentPrivateKey: `0x${string}`,
   vaultAddress: `0x${string}`,
-  amount: string
+  amount: string,
+  agentWallet?: string
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
+  const account = privateKeyToAccount(agentPrivateKey);
+  const agentAddr = agentWallet || account.address;
 
   try {
     // Get the permission context
@@ -139,12 +142,10 @@ export async function executeVaultDeposit(
     if (!permissionsContext || !delegationManager) {
       // Fallback to direct execution if no delegation context
       console.log("No delegation context, falling back to direct execution");
-      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount);
+      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr);
     }
 
     // Create agent wallet client
-    const account = privateKeyToAccount(agentPrivateKey);
-    
     const walletClient = createWalletClient({
       account,
       chain: sepolia,
@@ -185,6 +186,7 @@ export async function executeVaultDeposit(
       recipient: vaultAddress,
       status: receipt.status === "success" ? "success" : "failed",
       usedPermission: true,
+      agentWallet: agentAddr,
     });
 
     return {
@@ -200,7 +202,7 @@ export async function executeVaultDeposit(
     // If permission execution fails, try direct execution as fallback
     if (error.message?.includes("delegation") || error.message?.includes("permission") || error.message?.includes("revert")) {
       console.log("Permission execution failed, trying direct execution");
-      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount);
+      return executeVaultDepositDirect(agentPrivateKey, vaultAddress, amount, agentAddr);
     }
     
     return {
@@ -220,12 +222,14 @@ export async function executeVaultDeposit(
 async function executeVaultDepositDirect(
   agentPrivateKey: `0x${string}`,
   vaultAddress: `0x${string}`,
-  amount: string
+  amount: string,
+  agentWallet?: string
 ): Promise<ExecutionResult> {
   const timestamp = Date.now();
 
   try {
     const account = privateKeyToAccount(agentPrivateKey);
+    const agentAddr = agentWallet || account.address;
     
     const walletClient = createWalletClient({
       account,
@@ -258,6 +262,7 @@ async function executeVaultDepositDirect(
       recipient: vaultAddress,
       status: receipt.status === "success" ? "success" : "failed",
       usedPermission: false,
+      agentWallet: agentAddr,
     });
 
     return {
@@ -416,6 +421,7 @@ function storeExecution(execution: {
   recipient: string;
   status: string;
   usedPermission?: boolean;
+  agentWallet?: string;
 }) {
   const executions = JSON.parse(localStorage.getItem("leash_executions") || "[]");
   executions.push(execution);
