@@ -256,7 +256,6 @@ export function getAgentExecutions(agentWallet: string): StoredExecution[] {
  */
 export function getExpiringPermissions(withinDays: number = 7): PermissionWithHealth[] {
   const permissions = getPermissionsWithHealth();
-  const now = Math.floor(Date.now() / 1000);
   const threshold = withinDays * 86400;
   
   return permissions.filter(
