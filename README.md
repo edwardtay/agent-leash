@@ -30,10 +30,10 @@ User grants Permission → Agent signs tx → User's wallet pays → 🔐 Contro
 
 | Agent | Icon | What it does | Use Case |
 |-------|------|-------------|----------|
-| **DCA Bot** | 📈 | Auto-buy tokens on schedule | Dollar-cost averaging |
+| **DCA Bot** | 📈 | Swap tokens on schedule (ETH ↔ USDC) | Dollar-cost averaging |
 | **Auto-Transfer** | 💸 | Send tokens periodically | Recurring payments |
-| **Gas Refiller** | ⛽ | Top up a wallet when ETH low | Keep bots funded |
-| **Savings Vault** | 🏦 | Auto-deposit to vault contract | Automated savings |
+| **Gas Refiller** | ⛽ | Top up wallet when ETH below threshold | Keep bots funded |
+| **Auto-Deposit** | 🏦 | Deposit to Aave (yield) or demo vault | Automated savings |
 
 ## � How It Works
 
@@ -97,7 +97,15 @@ Real-time multi-chain indexing across Sepolia and Base Sepolia:
 | Network | Contract | Address |
 |---------|----------|---------|
 | Sepolia | SimpleVault | `0x9acec7011519F89C59d9A595f9829bBb79Ed0d4b` |
+| Sepolia | AaveWrapper | `0xdb1acDc06b6b6Fb711EC111376F410954362f9BA` |
 | Base Sepolia | SimpleVault | `0x93fc90a3Fb7d8c15bbaF50bFCc612B26CA8E68c8` |
+
+### AaveWrapper (Real Yield!)
+The AaveWrapper contract wraps ETH → WETH → Aave V3 in a single `deposit()` call:
+- User sends ETH to AaveWrapper
+- Contract wraps to WETH and supplies to Aave V3 Pool
+- User receives aWETH (yield-bearing token)
+- Earns real Aave interest on Sepolia testnet
 
 ## 🏗 Architecture
 
@@ -153,7 +161,8 @@ agent-leash/
 │       ├── Header.tsx        # Wallet connect button
 │       └── AddressDisplay.tsx
 ├── contracts/
-│   └── SimpleVault.sol       # Demo vault contract
+│   ├── SimpleVault.sol       # Demo vault (no yield)
+│   └── AaveWrapper.sol       # Aave V3 wrapper (real yield!)
 ├── indexer/
 │   ├── config.yaml           # Envio multi-chain config
 │   ├── schema.graphql        # GraphQL schema

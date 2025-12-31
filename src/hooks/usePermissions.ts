@@ -1,12 +1,22 @@
 import { useCallback, useState } from "react";
 import { parseUnits } from "viem";
-import { sepolia } from "viem/chains";
-import { useAccount, useWalletClient } from "wagmi";
+import { sepolia, baseSepolia } from "viem/chains";
+import { useAccount, useChainId, useWalletClient } from "wagmi";
 
-// Token configurations for Sepolia
+// Chain-specific token configurations
+const CHAIN_TOKENS: Record<number, { USDC: `0x${string}` }> = {
+  [sepolia.id]: {
+    USDC: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+  },
+  [baseSepolia.id]: {
+    USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  },
+};
+
+// Token configurations (address will be resolved per chain)
 export const TOKENS = {
   USDC: {
-    address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as `0x${string}`,
+    address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as `0x${string}`, // default, will be overridden
     symbol: "USDC",
     decimals: 6,
     name: "USD Coin",
@@ -51,6 +61,7 @@ export const usePermissions = () => {
 
   const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
 
   const requestPermission = useCallback(
     async (config: PermissionConfig, sessionAccountAddress: string) => {
@@ -78,7 +89,14 @@ export const usePermissions = () => {
             ? Math.floor(new Date(config.customStartDate).getTime() / 1000)
             : currentTime;
         const expiry = currentTime + config.durationDays * 86400;
-        const token = TOKENS[config.token];
+        
+        // Get chain-specific token address
+        const chainTokens = CHAIN_TOKENS[chainId] || CHAIN_TOKENS[sepolia.id];
+        const token = {
+          ...TOKENS[config.token],
+          address: config.token === "USDC" ? chainTokens.USDC : TOKENS[config.token].address,
+        };
+        
         const justification =
           config.justification ||
           `AgentLeash: ${config.permissionType === "stream" ? "Stream" : "Spend"} ${config.token}`;
@@ -91,7 +109,7 @@ export const usePermissions = () => {
         if (config.token === "ETH") {
           if (isStream) {
             permissionRequest = {
-              chainId: sepolia.id,
+              chainId,
               expiry,
               signer: { type: "account", data: { address: agentAddress } },
               isAdjustmentAllowed: true,
@@ -108,7 +126,7 @@ export const usePermissions = () => {
             };
           } else {
             permissionRequest = {
-              chainId: sepolia.id,
+              chainId,
               expiry,
               signer: { type: "account", data: { address: agentAddress } },
               isAdjustmentAllowed: true,
@@ -126,7 +144,7 @@ export const usePermissions = () => {
         } else {
           if (isStream) {
             permissionRequest = {
-              chainId: sepolia.id,
+              chainId,
               expiry,
               signer: { type: "account", data: { address: agentAddress } },
               isAdjustmentAllowed: true,
@@ -144,7 +162,7 @@ export const usePermissions = () => {
             };
           } else {
             permissionRequest = {
-              chainId: sepolia.id,
+              chainId,
               expiry,
               signer: { type: "account", data: { address: agentAddress } },
               isAdjustmentAllowed: true,
@@ -185,7 +203,7 @@ export const usePermissions = () => {
         setIsLoading(false);
       }
     },
-    [address, walletClient]
+    [address, walletClient, chainId]
   );
 
   const getStoredPermissions = useCallback(() => {
