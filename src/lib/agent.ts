@@ -12,7 +12,7 @@ const SEPOLIA_RPC = import.meta.env.VITE_SEPOLIA_RPC || "https://ethereum-sepoli
 const BASE_SEPOLIA_RPC = import.meta.env.VITE_BASE_SEPOLIA_RPC || "https://sepolia.base.org";
 
 // Chain configs
-const CHAIN_CONFIG = {
+const CHAIN_CONFIG: Record<number, { chain: typeof sepolia | typeof baseSepolia; rpc: string; usdc: `0x${string}` }> = {
   [sepolia.id]: {
     chain: sepolia,
     rpc: SEPOLIA_RPC,
