@@ -68,7 +68,7 @@ export function Header() {
                             <img src={chain.iconUrl} alt={chain.name || ""} className="w-4 h-4 rounded-full" />
                           )}
                           <span className="text-[10px] font-medium hidden sm:inline">
-                            {chain.name === "Sepolia" ? "Sepolia" : chain.name === "Base Sepolia" ? "Base" : chain.name?.slice(0, 6)}
+                            {chain.name}
                           </span>
                           <svg width="10" height="6" viewBox="0 0 10 6" fill="none" className="text-[var(--text-muted)]">
                             <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>

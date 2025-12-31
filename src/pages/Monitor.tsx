@@ -453,9 +453,9 @@ export function Monitor() {
                         onClick={() => handleMultiChainExecute(agent)}
                         disabled={isMultiExecuting || parseFloat(userBalance.eth) < 0.0002}
                         className="px-2 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg disabled:opacity-50 hover:bg-purple-500/30"
-                        title="Execute on both Sepolia & Base"
+                        title="Execute on all chains"
                       >
-                        {isMultiExecuting ? "⏳" : "🌐 Multi"}
+                        {isMultiExecuting ? "⏳" : "🌐 All Chains"}
                       </button>
                     )}
                     <button
@@ -581,9 +581,15 @@ export function Monitor() {
                   <div className="max-h-[60vh] overflow-y-auto">
                     {indexedDeposits.map((d) => {
                       // timestamp from Envio is BigInt unix timestamp in seconds
-                      const timestampMs = d.timestamp ? Number(d.timestamp) * 1000 : Date.now();
+                      let timestampMs = Date.now();
+                      if (d.timestamp) {
+                        const ts = typeof d.timestamp === 'string' ? parseInt(d.timestamp) : Number(d.timestamp);
+                        if (!isNaN(ts) && ts > 0) {
+                          timestampMs = ts * 1000;
+                        }
+                      }
                       const secondsAgo = Math.floor((Date.now() - timestampMs) / 1000);
-                      const timeAgo = secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
+                      const timeAgo = isNaN(secondsAgo) || secondsAgo < 0 ? "now" : secondsAgo < 60 ? `${secondsAgo}s` : secondsAgo < 3600 ? `${Math.floor(secondsAgo / 60)}m` : `${Math.floor(secondsAgo / 3600)}h`;
                       
                       // Chain logos
                       const isSepolia = d.chainId === 11155111;
