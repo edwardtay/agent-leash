@@ -224,6 +224,17 @@ export function Monitor() {
       setEnvioStatus(ok ? "online" : "offline");
       if (ok) getVaultDeposits(10).then(setIndexedDeposits);
     });
+  }, [userAddress]);
+
+  // Refresh balance when chain changes
+  useEffect(() => {
+    if (userAddress && chainId) {
+      console.log("Fetching balance for chain:", chainId);
+      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(balance => {
+        console.log("Balance:", balance);
+        setUserBalance(balance);
+      });
+    }
   }, [userAddress, chainId]);
 
   // Auto-refresh deposits every 3 seconds when Envio is online
