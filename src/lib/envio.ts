@@ -24,13 +24,18 @@ async function query<T>(queryString: string, variables?: Record<string, any>, re
         },
         body: JSON.stringify({ query: queryString, variables }),
         signal: controller.signal,
+        mode: "cors",
+        credentials: "omit", // Don't send cookies to avoid CORS issues
       });
       
       clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.warn(`Envio response not ok: ${response.status}`);
-        if (attempt < retries) continue;
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
         return null;
       }
 
@@ -43,12 +48,14 @@ async function query<T>(queryString: string, variables?: Record<string, any>, re
 
       return result.data || null;
     } catch (error: any) {
-      console.warn(`Envio query attempt ${attempt + 1} failed:`, error.message);
+      // Don't spam console with expected errors
+      if (attempt === retries) {
+        console.warn("Envio query failed after retries:", error.message || "Network error");
+      }
       if (attempt < retries) {
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // Exponential backoff
         continue;
       }
-      console.error("Envio query error after retries:", error);
       return null;
     }
   }
@@ -206,7 +213,7 @@ export async function getAggregatedStats(userAddress: string) {
 export async function checkEnvioHealth(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
     
     const response = await fetch(ENVIO_ENDPOINT, {
       method: "POST",
@@ -216,16 +223,22 @@ export async function checkEnvioHealth(): Promise<boolean> {
       },
       body: JSON.stringify({ query: "{ __typename }" }),
       signal: controller.signal,
+      mode: "cors",
+      credentials: "omit", // Don't send cookies to avoid CORS issues
     });
     
     clearTimeout(timeoutId);
     
-    if (!response.ok) return false;
+    if (!response.ok) {
+      console.warn(`Envio health check failed: ${response.status}`);
+      return false;
+    }
     
     const data = await response.json();
     return !!data?.data?.__typename;
-  } catch (error) {
-    console.warn("Envio health check failed:", error);
+  } catch (error: any) {
+    // Silently fail - Envio being offline is expected sometimes
+    console.warn("Envio health check failed:", error.message || "Network error");
     return false;
   }
 }

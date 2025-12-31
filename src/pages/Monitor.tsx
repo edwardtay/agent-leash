@@ -222,14 +222,25 @@ export function Monitor() {
   }, [userAddress]);
 
   // Auto-refresh deposits every 3 seconds when Envio is online
+  // Also retry connection every 10 seconds when offline
   useEffect(() => {
-    if (envioStatus !== "online") return;
-    
-    const interval = setInterval(() => {
-      getVaultDeposits(10).then(setIndexedDeposits);
-    }, 3000);
-    
-    return () => clearInterval(interval);
+    if (envioStatus === "online") {
+      const interval = setInterval(() => {
+        getVaultDeposits(10).then(setIndexedDeposits);
+      }, 3000);
+      return () => clearInterval(interval);
+    } else {
+      // Retry connection when offline
+      const retryInterval = setInterval(() => {
+        checkEnvioHealth().then(ok => {
+          if (ok) {
+            setEnvioStatus("online");
+            getVaultDeposits(10).then(setIndexedDeposits);
+          }
+        });
+      }, 10000);
+      return () => clearInterval(retryInterval);
+    }
   }, [envioStatus]);
 
   // Auto-execute scheduler (client-side, runs when app is open)
