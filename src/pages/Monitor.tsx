@@ -28,12 +28,6 @@ const AGENT_ICONS: Record<string, string> = {
   vault: "🏦",
 };
 
-// Chain configs
-const CHAINS = {
-  sepolia: { id: 11155111, name: "Sepolia", badge: "Sepolia", color: "blue" },
-  baseSepolia: { id: 84532, name: "Base Sepolia", badge: "Base", color: "purple" },
-};
-
 interface AgentSetup {
   agentType: string;
   agentName: string;
@@ -60,7 +54,6 @@ export function Monitor() {
   const [permissions, setPermissions] = useState<PermissionWithHealth[]>([]);
   const [userBalance, setUserBalance] = useState({ eth: "0", usdc: "0" });
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
-  const [isMultiExecuting, setIsMultiExecuting] = useState(false);
   const [isRevoking, setIsRevoking] = useState<string | null>(null);
   const [lastExecution, setLastExecution] = useState<any>(null);
   const [envioStatus, setEnvioStatus] = useState<"checking" | "online" | "offline">("checking");
@@ -278,45 +271,6 @@ export function Monitor() {
     }
   };
 
-  // Multi-chain execute - runs on both Sepolia and Base Sepolia
-  const handleMultiChainExecute = async (agent: AgentSetup) => {
-    const privateKey = agent.agentPrivateKey as `0x${string}`;
-    if (!privateKey) {
-      addToast("error", "Agent private key not found");
-      return;
-    }
-
-    setIsMultiExecuting(true);
-    addToast("info", "Executing on both chains...");
-
-    try {
-      // Execute on Sepolia
-      const sepoliaVault = getVaultAddress(CHAINS.sepolia.id);
-      if (sepoliaVault) {
-        const result1 = await executeVaultDeposit(privateKey, sepoliaVault, "0.0001");
-        if (result1.success) {
-          addToast("success", "✓ Sepolia deposit complete");
-        }
-      }
-
-      // Execute on Base Sepolia
-      const baseVault = getVaultAddress(CHAINS.baseSepolia.id);
-      if (baseVault) {
-        const result2 = await executeVaultDeposit(privateKey, baseVault, "0.0001");
-        if (result2.success) {
-          addToast("success", "✓ Base Sepolia deposit complete");
-        }
-      }
-
-      // Refresh deposits after both complete
-      setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
-    } catch (error: any) {
-      addToast("error", error.message || "Multi-chain execution failed");
-    } finally {
-      setIsMultiExecuting(false);
-    }
-  };
-
   if (!isConnected) {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center">
@@ -459,16 +413,6 @@ export function Monitor() {
                     >
                       🗑️
                     </button>
-                    {agent.agentType === "vault" && (
-                      <button
-                        onClick={() => handleMultiChainExecute(agent)}
-                        disabled={isMultiExecuting || parseFloat(userBalance.eth) < 0.0002}
-                        className="px-2 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg disabled:opacity-50 hover:bg-purple-500/30"
-                        title="Execute on all chains"
-                      >
-                        {isMultiExecuting ? "⏳" : "🌐 All Chains"}
-                      </button>
-                    )}
                     <button
                       onClick={() => handleExecute(agent)}
                       disabled={isThisExecuting || parseFloat(userBalance.eth) < 0.0001}
