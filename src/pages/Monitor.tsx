@@ -216,7 +216,7 @@ export function Monitor() {
     
     // Fetch user's wallet balance (where funds come from)
     if (userAddress) {
-      getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+      getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
     }
 
     setPermissions(getPermissionsWithHealth());
@@ -224,7 +224,7 @@ export function Monitor() {
       setEnvioStatus(ok ? "online" : "offline");
       if (ok) getVaultDeposits(10).then(setIndexedDeposits);
     });
-  }, [userAddress]);
+  }, [userAddress, chainId]);
 
   // Auto-refresh deposits every 3 seconds when Envio is online
   useEffect(() => {
@@ -253,7 +253,7 @@ export function Monitor() {
         addToast("success", `Deposited 0.0001 ETH to vault`);
         // Refresh user balance (funds come from user's account)
         if (userAddress) {
-          getUserSmartAccountBalance(userAddress as `0x${string}`).then(setUserBalance);
+          getUserSmartAccountBalance(userAddress as `0x${string}`, chainId).then(setUserBalance);
         }
         setTimeout(() => getVaultDeposits(10).then(setIndexedDeposits), 3000);
       } else {
