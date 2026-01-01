@@ -1,114 +1,208 @@
-# 🤖 AgentLeash
+# AgentLeash
 
-**Your AI agents are spending your money. Shouldn't you have a leash on them?**
-
-AgentLeash solves the "runaway agent" problem — AI agents with unlimited wallet access can drain funds in seconds. We give you granular, time-limited spending controls using ERC-7715 permissions, so your agents can only spend what you allow, when you allow it.
-
-## 🔑 How It Works
+**Granular spending controls for AI agents using ERC-7715 permissions.**
 
 ```
-Traditional Flow (Dangerous):
-User funds Agent Wallet → Agent spends freely → 💸 Unlimited risk
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              THE PROBLEM                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   User ──► Agent Wallet ──► Unlimited Access ──► 💀 Drained in seconds     │
+│                                                                             │
+│   AI agents need wallet access to execute trades, deposits, transfers.     │
+│   Traditional approach: fund a hot wallet the agent controls.              │
+│   Risk: agent bug, prompt injection, or malicious update = total loss.     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-AgentLeash Flow (Safe):
-User grants Permission → Agent signs tx → User's wallet pays → 🔐 Controlled spending
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              THE SOLUTION                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   User ──► ERC-7715 Permission ──► Agent signs ──► User wallet pays        │
+│                 │                                                           │
+│                 ├── Token: ETH or USDC                                      │
+│                 ├── Amount: 0.1 ETH per day                                 │
+│                 ├── Period: hourly/daily/weekly                             │
+│                 └── Expiry: 7 days                                          │
+│                                                                             │
+│   Agent never holds funds. Permission is time-bound and rate-limited.      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**The agent never holds your funds.** It only has permission to spend FROM your wallet, within the limits you set.
+## Architecture
 
-## 🤖 Agent Types
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                   USER WALLET                                    │
+│                          (MetaMask Flask + Smart Account)                        │
+│                                                                                  │
+│   ┌─────────────────┐    ERC-7715     ┌─────────────────┐                       │
+│   │  Funds (ETH)    │◄───Permission───│  Delegation     │                       │
+│   │  Funds (USDC)   │    Grant        │  Manager        │                       │
+│   └─────────────────┘                 └────────┬────────┘                       │
+└───────────────────────────────────────────────┼──────────────────────────────────┘
+                                                │
+                        permissionsContext + delegationManager
+                                                │
+                                                ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                  AGENT WALLET                                    │
+│                              (EOA, no funds needed)                              │
+│                                                                                  │
+│   ┌─────────────────────────────────────────────────────────────────────────┐   │
+│   │  sendTransactionWithDelegation({                                        │   │
+│   │    to: vault,                                                           │   │
+│   │    value: 0.01 ETH,                                                     │   │
+│   │    data: deposit(),                                                     │   │
+│   │    permissionsContext,    ◄── proves agent has permission               │   │
+│   │    delegationManager      ◄── routes through user's smart account       │   │
+│   │  })                                                                     │   │
+│   └─────────────────────────────────────────────────────────────────────────┘   │
+└───────────────────────────────────────────────┬──────────────────────────────────┘
+                                                │
+                                                ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                                TARGET CONTRACTS                                  │
+├────────────────────┬─────────────────────┬───────────────────────────────────────┤
+│    SimpleVault     │     YieldVault      │           AaveWrapper                 │
+│    (demo)          │     (unified)       │     (ETH→WETH→Aave supply)            │
+├────────────────────┴─────────────────────┴───────────────────────────────────────┤
+│                                                                                  │
+│   Sepolia:     0x9acec...d4b    0xcE338...6D4    0xdb1ac...c8E                   │
+│   Base Sepolia: 0x93fc9...c8    0x78Efd...9Bb    (no Aave)                       │
+│                                                                                  │
+│   emit Deposit(user, amount, timestamp)  ──────────────────────┐                │
+│   emit Withdrawal(user, amount, timestamp)                     │                │
+└────────────────────────────────────────────────────────────────┼─────────────────┘
+                                                                 │
+                                                                 ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                              ENVIO HYPERINDEX                                    │
+│                         (real-time multi-chain indexing)                         │
+│                                                                                  │
+│   GraphQL: https://indexer.dev.hyperindex.xyz/.../graphql                        │
+│                                                                                  │
+│   ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐                 │
+│   │  VaultDeposit   │  │ VaultWithdrawal │  │   DailyStats    │                 │
+│   │  - user         │  │  - user         │  │  - totalVolume  │                 │
+│   │  - amount       │  │  - amount       │  │  - uniqueUsers  │                 │
+│   │  - chainId      │  │  - chainId      │  │  - chainId      │                 │
+│   └─────────────────┘  └─────────────────┘  └─────────────────┘                 │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
 
-| Agent | What it does |
-|-------|-------------|
-| 📈 **DCA Bot** | Swap tokens on schedule (ETH ↔ USDC) |
-| 💸 **Auto-Transfer** | Send tokens periodically |
-| ⛽ **Gas Refiller** | Top up wallet when ETH below threshold |
-| 🏦 **Auto-Deposit** | Deposit to yield vaults automatically |
+## Permission Types
 
-## 🚀 Getting Started
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ERC-7715 PERMISSION TYPES                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PERIODIC (rate-limited)                                                    │
+│  ├── native-token-periodic    ETH: 0.1/day for 7 days                      │
+│  └── erc20-token-periodic     USDC: 100/week for 30 days                   │
+│                                                                             │
+│  STREAMING (continuous)                                                     │
+│  ├── native-token-stream      ETH: 0.0001/second, max 1 ETH                │
+│  └── erc20-token-stream       USDC: 0.01/second, max 1000 USDC             │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Permission Request Structure:                                              │
+│  {                                                                          │
+│    chainId: 11155111,                                                       │
+│    expiry: 1735689600,                                                      │
+│    signer: { type: "account", data: { address: agentWallet } },            │
+│    permission: {                                                            │
+│      type: "native-token-periodic",                                         │
+│      data: { periodAmount, periodDuration, startTime, justification }       │
+│    }                                                                        │
+│  }                                                                          │
+│                                                                             │
+│  Permission Response:                                                       │
+│  [{ permissionsContext, signerMeta: { delegationManager } }]               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### Prerequisites
-- MetaMask Flask v13.5+ (required for ERC-7715)
-- Node.js 18+
-- Testnet ETH (Sepolia or Base Sepolia)
+## Contracts
 
-### Installation
+```solidity
+// AaveWrapper.sol - ETH → WETH → Aave in one call
+function deposit() external payable {
+    WETH.deposit{value: msg.value}();
+    AAVE_POOL.supply(address(WETH), msg.value, msg.sender, 0);
+    emit Deposit(msg.sender, msg.value, block.timestamp);
+}
+
+// Sepolia Aave V3 addresses:
+// Pool:  0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951
+// WETH:  0xC558DBdd856501FCd9aaF1E62eae57A9F0629a3c
+// aWETH: 0x5b071b590a59395fE4025A0Ccc1FcC931AAc1830
+```
+
+## Stack
+
+| Component | Implementation |
+|-----------|----------------|
+| Permissions | `@metamask/smart-accounts-kit` → `erc7715ProviderActions`, `erc7710WalletActions` |
+| Wallet | RainbowKit + Wagmi + viem |
+| Indexer | Envio HyperIndex (Sepolia + Base Sepolia) |
+| Contracts | Foundry (SimpleVault, YieldVault, AaveWrapper) |
+| Frontend | React 19 + TypeScript + Vite + Tailwind |
+
+## Setup
 
 ```bash
+# requires MetaMask Flask v13.5+ (ERC-7715 not in mainline MetaMask yet)
 npm install
 npm run dev
+
+# deploy contracts (optional, already deployed)
+forge script script/DeployYieldVault.s.sol --rpc-url $SEPOLIA_RPC --broadcast
+forge script script/DeployAaveWrapper.s.sol --rpc-url $SEPOLIA_RPC --broadcast
 ```
 
-### Environment
-
-Create `.env.local`:
 ```env
-VITE_WALLETCONNECT_PROJECT_ID=your_project_id
-VITE_SEPOLIA_RPC=https://your-rpc-endpoint
-VITE_BASE_SEPOLIA_RPC=https://your-base-rpc-endpoint
+# .env.local
+VITE_WALLETCONNECT_PROJECT_ID=xxx
+VITE_SEPOLIA_RPC=https://eth-sepolia.g.alchemy.com/v2/xxx
+VITE_BASE_SEPOLIA_RPC=https://base-sepolia.g.alchemy.com/v2/xxx
+VITE_ENVIO_ENDPOINT=https://indexer.dev.hyperindex.xyz/xxx/v1/graphql
 ```
 
-## 🏗 Architecture
+## Flow
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    User's Wallet                        │
-│                   (Funds stay here)                     │
-└─────────────────────┬───────────────────────────────────┘
-                      │ ERC-7715 Permission
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Agent Wallet                         │
-│              (Signs txs, no funds)                      │
-└─────────────────────┬───────────────────────────────────┘
-                      │ Execute with delegation
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              Target Contract (Vault)                    │
-└─────────────────────┬───────────────────────────────────┘
-                      │ Events
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              Envio HyperSync Indexer                    │
-│            (Real-time multi-chain tracking)             │
-└─────────────────────────────────────────────────────────┘
+1. User connects MetaMask Flask (smart account enabled)
+2. User configures agent: token, amount/period, duration
+3. User grants ERC-7715 permission → stored locally + on-chain delegation
+4. Agent executes: signs tx with permissionsContext → user's wallet pays
+5. Envio indexes Deposit/Withdrawal events across chains
+6. Monitor dashboard shows real-time permission health + execution history
 ```
 
-## 🔧 Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | React + TypeScript + Vite |
-| Styling | Tailwind CSS |
-| Wallet | RainbowKit + Wagmi |
-| Permissions | ERC-7715 / ERC-7710 |
-| Indexer | Envio HyperIndex |
-| Networks | Sepolia, Base Sepolia |
-| Contracts | Solidity + Foundry |
-
-## 📁 Structure
+## Key Files
 
 ```
-├── src/
-│   ├── pages/          # App pages (Setup, Grant, Monitor)
-│   ├── lib/            # Core logic (agent, permissions, envio)
-│   ├── hooks/          # React hooks
-│   └── components/     # UI components
-├── contracts/          # Solidity contracts
-├── indexer/            # Envio indexer config
-└── script/             # Deployment scripts
+src/hooks/usePermissions.ts    # ERC-7715 permission request flow
+src/lib/agent.ts               # sendTransactionWithDelegation execution
+src/lib/permissions.ts         # permission health scoring + analytics
+src/lib/envio.ts               # GraphQL client for indexed data
+src/config/chains.ts           # multi-chain contract addresses
+contracts/AaveWrapper.sol      # ETH→Aave yield wrapper
+indexer/config.yaml            # Envio multi-chain indexer config
 ```
 
-## ⚠️ Notes
+## Links
 
-- Requires MetaMask Flask (regular MetaMask doesn't support ERC-7715 yet)
-- Currently testnet only (Sepolia, Base Sepolia)
-- Funds stay in your wallet - agent only has delegated permission
-
-## 🔗 Links
-
-- [ERC-7715 Spec](https://eips.ethereum.org/EIPS/eip-7715)
+- [ERC-7715](https://eips.ethereum.org/EIPS/eip-7715) - Permission request spec
+- [ERC-7710](https://eips.ethereum.org/EIPS/eip-7710) - Delegation execution spec  
+- [MetaMask Smart Accounts Kit](https://github.com/MetaMask/smart-accounts-kit)
 - [Envio HyperIndex](https://docs.envio.dev/)
+- [Aave V3 Sepolia](https://docs.aave.com/developers/deployed-contracts/v3-testnet-addresses)
 
 ---
 
